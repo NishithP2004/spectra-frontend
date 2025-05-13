@@ -9,13 +9,15 @@ interface ChatInterfaceProps {
   activityLog: LogEntry[];
   isHackingMode?: boolean;
   currentUser?: User | null;
+  sessionId: string;
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
   onSendMessage, 
   activityLog = [], 
   isHackingMode = false,
-  currentUser
+  currentUser,
+  sessionId
 }) => {
   const [inputText, setInputText] = useState('');
   const logDisplayRef = useRef<HTMLDivElement>(null);
@@ -30,6 +32,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   // State to manage microphone errors
   const [micError, setMicError] = useState<string | null>(null);
+
+  // Previous listening state to detect when listening stops
+  const prevListening = useRef(listening);
 
   useEffect(() => {
     if (logDisplayRef.current) {
@@ -64,20 +69,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     if (listening) {
       SpeechRecognition.stopListening();
-      // Transcript will be sent when listening stops (see useEffect below)
+      // The useEffect below will handle populating inputText with the transcript
     } else {
-      resetTranscript(); // Clear any previous transcript
+      setInputText(''); // Clear input text before starting new dictation
+      resetTranscript();
       SpeechRecognition.startListening({ continuous: true });
     }
   };
 
-  // Effect to send message when listening stops and transcript is available
+  // Effect to update inputText when listening stops and transcript is available
   useEffect(() => {
-    if (!listening && transcript) {
-      onSendMessage({ type: 'audio_transcript', content: transcript });
-      resetTranscript(); // Clear transcript after sending
+    if (prevListening.current && !listening && transcript) {
+      // Listening has just stopped
+      setInputText(transcript); // Populate input text with the final transcript
+      resetTranscript(); // Clear transcript so it doesn't interfere with next dictation
     }
-  }, [listening, transcript, onSendMessage, resetTranscript]);
+    // Update previous listening state for the next render
+    prevListening.current = listening;
+  }, [listening, transcript, resetTranscript]);
+
+  // Filter activity log based on isHackingMode
+  const filteredLogs = isHackingMode
+    ? activityLog // Show all logs in hacking mode
+    : activityLog.filter(log => log.source === 'user' || log.source === 'ai'); // Show only user and AI messages in normal mode
 
   const chatClass = isHackingMode 
     ? "bg-gray-900 text-green-400 border-gray-800" 
@@ -111,12 +125,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         className="flex-1 overflow-y-auto p-4 space-y-3"
         style={{ scrollbarWidth: 'thin' }}
       >
-        {activityLog.length === 0 ? (
+        {filteredLogs.length === 0 ? (
           <div className={`text-center py-8 ${isHackingMode ? "text-green-800" : "text-gray-500 dark:text-gray-400"}`}>
             No activity yet. Start interacting to see the log.
           </div>
         ) : (
-          activityLog.map((log, index) => (
+          filteredLogs.map((log, index) => (
             <ActivityLogItem 
               key={log.id || index} 
               log={log}
@@ -135,7 +149,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       <div className={`p-3 border-t ${isHackingMode ? "border-gray-700" : "border-gray-200 dark:border-slate-700"}`}>
         <div className="flex items-end gap-2">
           <textarea
-            value={inputText || transcript}
+            value={listening ? transcript : inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyPress}
             placeholder={listening ? "Listening..." : "Type your message..."}
@@ -147,7 +161,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           
           <button
             onClick={handleSendText}
-            disabled={(!inputText.trim() && !transcript.trim()) || listening}
+            disabled={!inputText.trim() || listening}
             className={`p-2.5 rounded-md ${isHackingMode ? "bg-green-700 hover:bg-green-600 text-green-300" : "bg-indigo-600 hover:bg-indigo-700 text-white dark:bg-indigo-500 dark:hover:bg-indigo-400"} disabled:opacity-60 transition-colors`}
           >
             <Send className="h-5 w-5" />

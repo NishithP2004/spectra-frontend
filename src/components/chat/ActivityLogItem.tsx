@@ -1,5 +1,7 @@
 import React from 'react';
-import { Bot, User, Info, Network, AlertTriangle } from 'lucide-react';
+import { Bot, User, Info, Network, AlertTriangle, Terminal, MessageSquare } from 'lucide-react';
+import { format } from 'date-fns';
+import ReactMarkdown from 'react-markdown';
 
 export interface LogEntry {
   id?: string;
@@ -20,31 +22,41 @@ interface ActivityLogItemProps {
 
 const ActivityLogItem: React.FC<ActivityLogItemProps> = ({ log, isHackingMode = false }) => {
   const getIcon = () => {
+    if (isHackingMode) {
+      return <Terminal className="w-5 h-5 text-green-400" />;
+    }
     switch (log.source) {
-      case 'user': return <User className="h-5 w-5" />;
-      case 'ai': return <Bot className="h-5 w-5" />;
-      case 'system': return <Info className="h-5 w-5" />;
-      case 'network': return <Network className="h-5 w-5" />;
-      case 'tool': return <Bot className="h-5 w-5" />;
-      default: return <Info className="h-5 w-5" />;
+      case 'user':
+        return <User className="w-5 h-5 text-blue-500" />;
+      case 'ai':
+        return <Bot className="w-5 h-5 text-purple-500" />;
+      case 'system':
+        return <AlertTriangle className="w-5 h-5 text-yellow-500" />;
+      case 'network':
+        return <Network className="w-5 h-5 text-red-500" />;
+      case 'tool':
+        return <Bot className="w-5 h-5 text-yellow-500" />;
+      default:
+        return <MessageSquare className="w-5 h-5 text-gray-500" />;
     }
   };
 
   const formatTimestamp = (timestamp: any) => {
     if (!timestamp) return '';
-    // Check if it's a timestamp object with toDate method (Firebase style)
-    if (timestamp.toDate) {
-      return timestamp.toDate().toLocaleTimeString();
+    try {
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+      return format(date, 'HH:mm:ss');
+    } catch (error) {
+      // console.error("Error formatting timestamp:", error);
+      // Fallback for invalid date/timestamp values
+      return typeof timestamp === 'string' ? timestamp : 'Invalid time';
     }
-    // For Date objects or ISO strings
-    return new Date(timestamp).toLocaleTimeString();
   };
 
   const getSourceClass = () => {
     const baseClasses = "rounded-lg p-3 mb-3";
     
     if (isHackingMode) {
-      // Hacking mode styling (dark with neon colors)
       switch (log.source) {
         case 'user': return `${baseClasses} bg-gray-900 border-l-4 border-blue-500 text-blue-400`;
         case 'ai': return `${baseClasses} bg-gray-900 border-l-4 border-green-500 text-green-400`;
@@ -54,7 +66,6 @@ const ActivityLogItem: React.FC<ActivityLogItemProps> = ({ log, isHackingMode = 
         default: return `${baseClasses} bg-gray-900 border-l-4 border-gray-500 text-gray-400`;
       }
     } else {
-      // Normal mode styling (light with subtle colors)
       switch (log.source) {
         case 'user': return `${baseClasses} bg-blue-50 dark:bg-blue-900/60 border-l-4 border-blue-300 dark:border-blue-600 text-gray-800 dark:text-blue-100`;
         case 'ai': return `${baseClasses} bg-green-50 dark:bg-green-900/60 border-l-4 border-green-300 dark:border-green-600 text-gray-800 dark:text-green-100`;
@@ -66,42 +77,49 @@ const ActivityLogItem: React.FC<ActivityLogItemProps> = ({ log, isHackingMode = 
     }
   };
 
+  const textColor = isHackingMode ? "text-green-300" : "text-gray-700 dark:text-gray-200";
+  const headerTextColor = isHackingMode ? "text-green-400" : "text-gray-800 dark:text-gray-100";
+  const timestampTextColor = isHackingMode ? "text-green-500" : "text-gray-500 dark:text-gray-400";
+  const reasoningTextColor = isHackingMode ? "text-green-400" : "text-gray-400 dark:text-gray-500";
+  const reasoningBgColor = isHackingMode ? "bg-black/50" : "bg-gray-100 dark:bg-slate-600";
+
   return (
     <div className={getSourceClass()}>
       <div className="flex items-center mb-1">
-        <div className={`flex-shrink-0 mr-2 ${isHackingMode ? "text-green-400" : "dark:text-gray-300"}`}>
+        <div className={`flex-shrink-0 mr-2 ${isHackingMode ? "text-green-400" : ""}`}>
           {getIcon()}
         </div>
-        <div className={`font-medium ${isHackingMode ? "" : "text-gray-800 dark:text-gray-100"}`}>
+        <div className={`font-medium ${headerTextColor}`}>
           {log.source.charAt(0).toUpperCase() + log.source.slice(1)}
           {log.type === 'error' && (
             <AlertTriangle className="h-4 w-4 inline ml-1 text-red-500 dark:text-red-400" />
           )}
         </div>
-        <div className={`ml-auto text-xs ${isHackingMode ? "text-gray-500" : "text-gray-500 dark:text-gray-400"}`}>
+        <div className={`ml-auto text-xs ${timestampTextColor}`}>
           {formatTimestamp(log.timestamp)}
         </div>
       </div>
       
-      <div className="mt-1">
+      <div className="mt-1 pl-7">
         {log.isCode ? (
-          <pre className={`p-2 rounded text-sm overflow-x-auto ${
-            isHackingMode ? "bg-gray-800 text-green-400" : "bg-gray-800 text-gray-200 dark:bg-slate-900 dark:text-slate-200"
-          }`}>
-            <code>{log.message}</code>
+          <pre className={`p-2 rounded text-sm overflow-x-auto whitespace-pre-wrap break-all ${isHackingMode ? "bg-gray-800 text-green-300" : "bg-gray-800 text-gray-200 dark:bg-slate-900 dark:text-slate-200"}`}>
+            <code>
+              <ReactMarkdown>{log.message}</ReactMarkdown>
+            </code>
           </pre>
         ) : (
-          <p className={isHackingMode ? "text-gray-300" : "text-gray-700 dark:text-gray-200"}>
-            {log.message}
-          </p>
+          <div className={`text-sm ${textColor} prose dark:prose-invert max-w-none overflow-x-auto`}>
+            <ReactMarkdown>{log.message}</ReactMarkdown>
+          </div>
         )}
         
         {log.reasoning && (
-          <div className={`mt-1 text-xs italic ${
-            isHackingMode ? "text-gray-500" : "text-gray-500 dark:text-gray-400"
-          }`}>
-            Reasoning: {log.reasoning}
-          </div>
+          <details className="mt-2 text-xs">
+            <summary className={`${reasoningTextColor} cursor-pointer hover:underline`}>Show reasoning</summary>
+            <p className={`mt-1 p-2 rounded ${reasoningBgColor} ${reasoningTextColor}`}>
+              {log.reasoning}
+            </p>
+          </details>
         )}
       </div>
     </div>

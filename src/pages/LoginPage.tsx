@@ -10,7 +10,7 @@ const LoginPage: React.FC = () => {
   const handleGoogleSignIn = async () => {
     try {
       await googleSignIn();
-      navigate('/');
+      navigate('/', { state: { message: 'Successfully logged in!', severity: 'success' } });
     } catch (error) {
       console.error("Failed to sign in with Google:", error);
       alert("Failed to sign in. Please try again.");

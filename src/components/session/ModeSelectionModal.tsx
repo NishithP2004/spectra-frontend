@@ -27,27 +27,47 @@ const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({
     onSubmit(sessionTitle, mode, enableRecording);
   };
 
-  const modalBgColor = "bg-slate-800";
-  const textColor = "text-gray-200";
-  const labelColor = "text-gray-400";
-  const inputBgColor = "bg-slate-700";
-  const inputBorderColor = "border-slate-600";
-  const inputFocusRingColor = "focus:ring-indigo-500 focus:border-indigo-500";
+  // Glassmorphic modal background
+  const modalStyleClasses = "bg-white/80 dark:bg-slate-800/80 backdrop-blur-lg shadow-2xl border border-gray-200 dark:border-slate-700/80";
 
-  const selectedModeClasses = "border-indigo-500 bg-slate-700 ring-2 ring-indigo-500";
-  const unselectedModeClasses = `${inputBorderColor} hover:border-indigo-600 hover:bg-slate-700/60`;
+  // Define base classes and dark mode overrides for inner elements
+  const textColor = "text-gray-800 dark:text-gray-100";
+  const headingColor = "text-gray-900 dark:text-white";
+  const labelColor = "text-gray-600 dark:text-gray-300";
+  const inputBgColor = "bg-gray-50/80 dark:bg-slate-700/80";
+  const inputBorderColor = "border-gray-300 dark:border-slate-600";
+  const inputFocusRingColor = "focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-indigo-500 dark:focus:border-indigo-600";
+  const placeholderColor = "placeholder-gray-400 dark:placeholder-gray-500";
+
+  const selectedModeBaseClasses = "border-indigo-500 ring-2 ring-indigo-500";
+  const selectedModeLightClasses = "bg-indigo-50";
+  const selectedModeDarkClasses = "dark:bg-slate-700";
+
+  const unselectedModeBaseClasses = "hover:border-indigo-500";
+  const unselectedModeLightClasses = "bg-white hover:bg-indigo-50";
+  const unselectedModeDarkClasses = "dark:bg-slate-800 dark:hover:bg-slate-700/60";
+  
+  const radioDotSelectedLight = "bg-indigo-500 border-indigo-500";
+  const radioDotSelectedDark = "dark:bg-indigo-500 dark:border-indigo-500";
+  const radioDotUnselectedLight = "border-gray-400";
+  const radioDotUnselectedDark = "dark:border-gray-500";
+
+  const checkboxSelectedLight = "bg-indigo-500 border-indigo-500";
+  const checkboxSelectedDark = "dark:bg-indigo-500 dark:border-indigo-500";
+  const checkboxUnselectedLightBg = "bg-gray-50";
+  const checkboxUnselectedDarkBg = "dark:bg-slate-700/80";
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/80 flex items-center justify-center p-4 animate-fadeIn">
-      <div className={`relative ${modalBgColor} rounded-lg shadow-xl max-w-md w-full mx-auto`}>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/30 dark:bg-slate-900/50 flex items-center justify-center p-4 animate-fadeIn">
+      <div className={`relative ${modalStyleClasses} rounded-lg max-w-md w-full mx-auto`}>
         <div className={`flex items-center justify-between p-5 border-b ${inputBorderColor} rounded-t`}>
-          <h3 className={`text-xl font-semibold ${textColor}`}>
+          <h3 className={`text-xl font-semibold ${headingColor}`}>
             Create New Browser Session
           </h3>
           <button
             type="button"
             onClick={onClose}
-            className={`${textColor} bg-transparent hover:bg-slate-700 rounded-lg text-sm w-8 h-8 inline-flex justify-center items-center`}
+            className={`bg-transparent hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-sm w-8 h-8 inline-flex justify-center items-center ${labelColor} hover:${textColor}`}
           >
             <X className="h-5 w-5" />
             <span className="sr-only">Close modal</span>
@@ -62,7 +82,7 @@ const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({
             <input
               type="text"
               id="sessionTitle"
-              className={`${inputBgColor} ${inputBorderColor} ${textColor} text-sm rounded-lg ${inputFocusRingColor} block w-full p-3 placeholder-gray-500`}
+              className={`${inputBgColor} ${inputBorderColor} ${textColor} ${placeholderColor} text-sm rounded-lg ${inputFocusRingColor} block w-full p-3`}
               value={sessionTitle}
               onChange={(e) => setSessionTitle(e.target.value)}
               placeholder="Enter a descriptive title"
@@ -73,14 +93,19 @@ const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({
           <div>
             <p className={`block mb-2 text-sm font-medium ${labelColor}`}>Select Mode</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div 
-                className={`p-4 border rounded-lg cursor-pointer transition-all duration-150 ease-in-out ${
-                  mode === 'Normal Mode' ? selectedModeClasses : unselectedModeClasses
+              {/* Normal Mode */}
+              <div
+                className={`p-4 border rounded-lg cursor-pointer transition-all duration-150 ease-in-out ${inputBorderColor} ${
+                  mode === 'Normal Mode'
+                    ? `${selectedModeBaseClasses} bg-indigo-100/80 dark:bg-slate-700/90`
+                    : `${unselectedModeBaseClasses} bg-white/60 dark:bg-slate-800/60 hover:bg-white/80 dark:hover:bg-slate-700/80`
                 }`}
                 onClick={() => setMode('Normal Mode')}
               >
                 <div className="flex items-center mb-1">
-                  <div className={`w-4 h-4 rounded-full border-2 ${mode === 'Normal Mode' ? 'border-indigo-500 bg-indigo-500' : 'border-gray-500'} flex items-center justify-center mr-2.5 flex-shrink-0`}>
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center mr-2.5 flex-shrink-0 ${
+                    mode === 'Normal Mode' ? `${radioDotSelectedLight} ${radioDotSelectedDark}` : `${radioDotUnselectedLight} ${radioDotUnselectedDark}`
+                  }`}>
                     {mode === 'Normal Mode' && <div className="w-1.5 h-1.5 bg-white rounded-full"></div>}
                   </div>
                   <h4 className={`font-semibold ${textColor}`}>Normal Mode</h4>
@@ -88,14 +113,19 @@ const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({
                 <p className={`text-xs ${labelColor} pl-[26px]`}>Enhanced secure browsing with AI assistance</p>
               </div>
               
-              <div 
-                className={`p-4 border rounded-lg cursor-pointer transition-all duration-150 ease-in-out ${
-                  mode === 'Hacking Mode' ? selectedModeClasses : unselectedModeClasses
+              {/* Hacking Mode */}
+              <div
+                className={`p-4 border rounded-lg cursor-pointer transition-all duration-150 ease-in-out ${inputBorderColor} ${
+                  mode === 'Hacking Mode'
+                    ? `${selectedModeBaseClasses} bg-indigo-100/80 dark:bg-slate-700/90`
+                    : `${unselectedModeBaseClasses} bg-white/60 dark:bg-slate-800/60 hover:bg-white/80 dark:hover:bg-slate-700/80`
                 }`}
                 onClick={() => setMode('Hacking Mode')}
               >
                 <div className="flex items-center mb-1">
-                  <div className={`w-4 h-4 rounded-full border-2 ${mode === 'Hacking Mode' ? 'border-indigo-500 bg-indigo-500' : 'border-gray-500'} flex items-center justify-center mr-2.5 flex-shrink-0`}>
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center mr-2.5 flex-shrink-0 ${
+                    mode === 'Hacking Mode' ? `${radioDotSelectedLight} ${radioDotSelectedDark}` : `${radioDotUnselectedLight} ${radioDotUnselectedDark}`
+                  }`}>
                     {mode === 'Hacking Mode' && <div className="w-1.5 h-1.5 bg-white rounded-full"></div>}
                   </div>
                   <h4 className={`font-semibold ${textColor}`}>Hacking Mode</h4>
@@ -107,7 +137,9 @@ const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({
 
           <div>
             <label htmlFor="enableRecording" className="flex items-center cursor-pointer">
-              <div className={`w-5 h-5 mr-2.5 rounded border-2 ${inputBorderColor} ${enableRecording ? 'bg-indigo-500 border-indigo-500' : inputBgColor} flex items-center justify-center transition-all`}>
+              <div className={`w-5 h-5 mr-2.5 rounded border-2 ${inputBorderColor} flex items-center justify-center transition-all ${
+                enableRecording ? `${checkboxSelectedLight} ${checkboxSelectedDark}` : `${inputBgColor}`
+              }`}>
                 {enableRecording && <Check className="w-3 h-3 text-white" />}
               </div>
               <input
@@ -121,17 +153,17 @@ const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({
             </label>
           </div>
           
-          <div className={`flex items-center justify-end space-x-3 pt-2 border-t ${inputBorderColor} mt-2`}>
+          <div className={`flex items-center justify-end space-x-3 pt-4 border-t ${inputBorderColor} mt-4`}>
             <button
               type="button"
               onClick={onClose}
-              className={`py-2.5 px-5 text-sm font-medium ${textColor} focus:outline-none bg-slate-600 hover:bg-slate-500 rounded-lg border ${inputBorderColor} focus:ring-4 focus:ring-slate-700 transition-colors`}
+              className={`py-2.5 px-5 text-sm font-medium ${textColor} focus:outline-none bg-gray-200/70 hover:bg-gray-300/70 dark:bg-slate-600/70 dark:hover:bg-slate-500/70 rounded-lg border ${inputBorderColor} focus:ring-4 focus:ring-gray-300 dark:focus:ring-slate-600 transition-colors`}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="py-2.5 px-5 text-sm font-medium text-white focus:outline-none bg-indigo-600 hover:bg-indigo-700 rounded-lg focus:ring-4 focus:ring-indigo-500/50 transition-colors"
+              className="py-2.5 px-5 text-sm font-medium text-white focus:outline-none bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 rounded-lg focus:ring-4 focus:ring-indigo-300 dark:focus:ring-indigo-800 transition-colors"
             >
               Create Session
             </button>

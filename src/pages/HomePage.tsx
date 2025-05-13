@@ -1,12 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { collection, query, where, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { collection, query, where, orderBy, onSnapshot, setDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import SessionCard, { Session } from '../components/session/SessionCard';
 import ModeSelectionModal from '../components/session/ModeSelectionModal';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { Plus, Search } from 'lucide-react';
+import Alert, { AlertColor } from '@mui/material/Alert';
+import Snackbar from '@mui/material/Snackbar';
+
+interface AlertMessage {
+  text: string;
+  severity: AlertColor;
+}
 
 const HomePage: React.FC = () => {
   const { currentUser } = useAuth();
@@ -15,6 +22,16 @@ const HomePage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const [alertMessage, setAlertMessage] = useState<AlertMessage | null>(null);
+
+  useEffect(() => {
+    if (location.state?.message && location.state?.severity) {
+      setAlertMessage({ text: location.state.message, severity: location.state.severity as AlertColor });
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location, navigate]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -50,8 +67,11 @@ const HomePage: React.FC = () => {
     setIsModalOpen(false);
     setLoading(true);
 
+    const newSessionId = crypto.randomUUID();
+
     try {
-      const newSession = {
+      const newSessionData = {
+        id: newSessionId,
         title,
         mode,
         enableRecording,
@@ -60,14 +80,20 @@ const HomePage: React.FC = () => {
         ownerPhotoURL: currentUser.photoURL,
         isPublic: true,
         createdAt: serverTimestamp(),
-        thumbnailUrl: `https://picsum.photos/seed/${Date.now()}/320/180`
+        thumbnailUrl: `https://picsum.photos/seed/${newSessionId}/320/180`
       };
 
-      const docRef = await addDoc(collection(db, 'sessions'), newSession);
-      navigate(`/session/${docRef.id}`);
+      await setDoc(doc(db, 'sessions', newSessionId), newSessionData);
+      
+      navigate(`/session/${newSessionId}`, { 
+        state: { 
+          message: `Session "${title}" (ID: ${newSessionId}) successfully created!`, 
+          severity: 'success' 
+        } 
+      });
     } catch (error) {
       console.error("Error creating session:", error);
-      alert("Failed to create session.");
+      setAlertMessage({ text: "Failed to create session. Please try again.", severity: 'error' });
     } finally {
       setLoading(false);
     }
@@ -103,6 +129,19 @@ const HomePage: React.FC = () => {
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {alertMessage && (
+        <Snackbar
+          open={Boolean(alertMessage)}
+          autoHideDuration={5000}
+          onClose={() => setAlertMessage(null)}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        >
+          <Alert onClose={() => setAlertMessage(null)} severity={alertMessage.severity} sx={{ width: '100%' }}>
+            {alertMessage.text}
+          </Alert>
+        </Snackbar>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 space-y-4 md:space-y-0">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Browser Sessions</h1>
         
