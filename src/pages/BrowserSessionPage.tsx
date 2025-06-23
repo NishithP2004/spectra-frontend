@@ -286,8 +286,8 @@ const BrowserSessionPage: React.FC = () => {
   const vncUrl = useMemo(() => {
     if (sessionState.isActive && currentUser) {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:80';
-      // Replace http/https with ws/wss for the websocket connection
-      const wsUrl = backendUrl.replace(/^http/, 'ws');
+      // Replace http/https with ws for the websocket connection
+      const wsUrl = backendUrl.replace(/^http|https/, 'ws');
       return `${wsUrl}/vnc?uid=${currentUser.uid}`;
     }
     return '';
