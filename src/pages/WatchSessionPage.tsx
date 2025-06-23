@@ -36,21 +36,31 @@ const WatchSessionPage: React.FC = () => {
       const mockSession: Session = {
         id: sessionId,
         title: 'Web Application Security Testing',
-        mode: 'Hacking Mode',
-        ownerId: '123456',
-        ownerName: 'Demo User',
-        ownerPhotoURL: 'https://randomuser.me/api/portraits/men/32.jpg',
-        isPublic: true,
-        duration: '45:22',
-        thumbnailUrl: 'https://images.pexels.com/photos/5380664/pexels-photo-5380664.jpeg?auto=compress&cs=tinysrgb&w=800',
         createdAt: new Date('2023-06-15T10:30:00'),
-        vncUrl: 'ws://mock-vnc-server.com/1234'
+        owner: {
+          uid: '123456',
+          name: 'Demo User',
+          photo: 'https://randomuser.me/api/portraits/men/32.jpg',
+        },
+        options: {
+          enableRecording: true,
+          mode: 'Hacking',
+          privacy: 'public',
+        },
+        recording: {
+          duration: 2722, // 45:22 in seconds
+          url: 'https://storage.googleapis.com/spectra-bucket/recordings/example.mp4',
+          thumbnail: 'https://images.pexels.com/photos/5380664/pexels-photo-5380664.jpeg?auto=compress&cs=tinysrgb&w=800',
+          summary: 'In this session, the user performed security testing on a web application. They began by scanning for open ports and discovered several potential vulnerabilities. The key findings included an unsecured admin interface, outdated plugins with known CVEs, and weak password policies. The session demonstrates standard penetration testing methodologies and responsible disclosure practices.',
+        },
       };
       
       setSession(mockSession);
       
-      // Mock AI Summary
-      setAiSummary('In this session, the user performed security testing on a web application. They began by scanning for open ports and discovered several potential vulnerabilities. The key findings included an unsecured admin interface, outdated plugins with known CVEs, and weak password policies. The session demonstrates standard penetration testing methodologies and responsible disclosure practices.');
+      // Set AI Summary from recording
+      if (mockSession.recording) {
+        setAiSummary(mockSession.recording.summary);
+      }
       
       setLoading(false);
     }, 1000);
@@ -83,12 +93,26 @@ const WatchSessionPage: React.FC = () => {
     });
   };
 
+  const formatDuration = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = seconds % 60;
+    
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
   const disqusConfig = {
     url: window.location.href,
     identifier: sessionId,
     title: session?.title || 'Session',
     language: 'en_US',
   };
+
+  const duration = session.recording ? formatDuration(session.recording.duration) : 'N/A';
+  const thumbnailUrl = session.recording?.thumbnail || `https://picsum.photos/seed/${session.id}/320/180`;
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 dark:text-gray-100">
@@ -106,12 +130,12 @@ const WatchSessionPage: React.FC = () => {
           {/* This would be a real video player in production */}
           <div className="text-center p-8 max-w-xl">
             <img 
-              src={session.thumbnailUrl} 
+              src={thumbnailUrl} 
               alt={session.title}
               className="max-h-80 mx-auto rounded-md shadow-lg"
             />
             <p className="text-white mt-4">
-              Session recording playback would appear here. Duration: {session.duration}
+              Session recording playback would appear here. Duration: {duration}
             </p>
           </div>
         </div>
@@ -123,37 +147,39 @@ const WatchSessionPage: React.FC = () => {
           <div className="flex items-center text-gray-600 dark:text-gray-400 mb-4">
             <span>{formatDate(session.createdAt)}</span>
             <span className="mx-2">•</span>
-            <span>Duration: {session.duration}</span>
+            <span>Duration: {duration}</span>
             <span className="mx-2">•</span>
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-              session.mode === 'Hacking Mode' 
+              session.options.mode === 'Hacking' 
                 ? 'bg-red-100 text-red-800 dark:bg-red-700/30 dark:text-red-300' 
                 : 'bg-blue-100 text-blue-800 dark:bg-blue-700/30 dark:text-blue-300'
             }`}>
-              {session.mode}
+              {session.options.mode} Mode
             </span>
           </div>
           
           <div className="flex items-center mb-6">
             <img 
-              src={session.ownerPhotoURL} 
-              alt={session.ownerName} 
+              src={session.owner.photo} 
+              alt={session.owner.name} 
               className="w-10 h-10 rounded-full mr-3" 
             />
             <div>
-              <p className="font-medium text-gray-900 dark:text-gray-100">{session.ownerName}</p>
+              <p className="font-medium text-gray-900 dark:text-gray-100">{session.owner.name}</p>
               <p className="text-sm text-gray-500 dark:text-gray-400">Session Creator</p>
             </div>
           </div>
           
           {/* AI-generated summary */}
-          <div className="mb-8 bg-indigo-50 dark:bg-slate-700/50 rounded-lg p-4 border border-indigo-100 dark:border-slate-700">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center">
-              <Robot className="h-5 w-5 mr-1 text-indigo-600 dark:text-indigo-400" />
-              AI-Generated Summary
-            </h2>
-            <p className="text-gray-700 dark:text-gray-300">{aiSummary}</p>
-          </div>
+          {aiSummary && (
+            <div className="mb-8 bg-indigo-50 dark:bg-slate-700/50 rounded-lg p-4 border border-indigo-100 dark:border-slate-700">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center">
+                <Robot className="h-5 w-5 mr-1 text-indigo-600 dark:text-indigo-400" />
+                AI-Generated Summary
+              </h2>
+              <p className="text-gray-700 dark:text-gray-300">{aiSummary}</p>
+            </div>
+          )}
         </div>
       </div>
 

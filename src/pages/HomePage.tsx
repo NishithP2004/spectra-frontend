@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { collection, query, where, orderBy, onSnapshot, setDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, setDoc, doc, serverTimestamp, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { useSession } from '../contexts/SessionContext';
 import SessionCard, { Session } from '../components/session/SessionCard';
+import { CreateSessionData } from '../types/session';
 import ModeSelectionModal from '../components/session/ModeSelectionModal';
+import SessionManager from '../components/session/SessionManager';
 import LoadingSpinner from '../components/common/LoadingSpinner';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Trash2 } from 'lucide-react';
 import Alert, { AlertColor } from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 
@@ -17,12 +20,16 @@ interface AlertMessage {
 
 const HomePage: React.FC = () => {
   const { currentUser } = useAuth();
+  const { sessionState } = useSession();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isStartingSession, setIsStartingSession] = useState(false);
+  const [sessionConfig, setSessionConfig] = useState<{ title: string; mode: string; enableRecording: boolean } | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const [isClearingNamespace, setIsClearingNamespace] = useState(false);
 
   const [alertMessage, setAlertMessage] = useState<AlertMessage | null>(null);
 
@@ -39,7 +46,8 @@ const HomePage: React.FC = () => {
     const sessionsRef = collection(db, 'sessions');
     const q = query(
       sessionsRef,
-      where('isPublic', '==', true),
+      where('options.privacy', '==', 'public'),
+      where('options.enableRecording', '==', true),
       orderBy('createdAt', 'desc')
     );
 
@@ -58,57 +66,84 @@ const HomePage: React.FC = () => {
     return () => unsubscribe();
   }, [currentUser]);
 
-  const handleCreateSession = async (title: string, mode: string, enableRecording: boolean) => {
+  const handleCreateSession = useCallback(async (title: string, mode: string, enableRecording: boolean) => {
     if (!currentUser) {
       alert("Please log in to create a session.");
       return;
     }
     
     setIsModalOpen(false);
-    setLoading(true);
+    setSessionConfig({ title, mode, enableRecording });
+    setIsStartingSession(true);
+  }, [currentUser]);
 
-    const newSessionId = crypto.randomUUID();
+  const handleSessionReady = useCallback(async (sessionId: string) => {
+    console.log('[HomePage] handleSessionReady called with sessionId:', sessionId);
+    if (!currentUser || !sessionConfig) {
+      console.log('[HomePage] Missing currentUser or sessionConfig, returning');
+      return;
+    }
 
     try {
-      const newSessionData = {
-        id: newSessionId,
-        title,
-        mode,
-        enableRecording,
-        ownerId: currentUser.uid,
-        ownerName: currentUser.displayName || currentUser.email,
-        ownerPhotoURL: currentUser.photoURL,
-        isPublic: true,
+      console.log('[HomePage] Creating Firestore session record...');
+      // Create Firestore session record
+      const newSessionData: CreateSessionData = {
+        id: sessionId,
+        title: sessionConfig.title,
         createdAt: serverTimestamp(),
-        thumbnailUrl: `https://picsum.photos/seed/${newSessionId}/320/180`
+        owner: {
+          uid: currentUser.uid,
+          name: currentUser.displayName || currentUser.email || 'Unknown User',
+          photo: currentUser.photoURL || '',
+        },
+        options: {
+          enableRecording: sessionConfig.enableRecording,
+          mode: sessionConfig.mode === 'Hacking Mode' ? 'Hacking' : 'Normal',
+          privacy: 'public',
+        },
       };
 
-      await setDoc(doc(db, 'sessions', newSessionId), newSessionData);
+      await setDoc(doc(db, 'sessions', sessionId), newSessionData);
+      console.log('[HomePage] Firestore session record created successfully');
       
-      navigate(`/session/${newSessionId}`, { 
+      // Redirect to the session page with success message
+      console.log('[HomePage] Navigating to session page...');
+      navigate(`/session/${sessionId}`, { 
         state: { 
-          message: `Session "${title}" (ID: ${newSessionId}) successfully created!`, 
-          severity: 'success' 
+          message: `Session "${sessionConfig.title}" started successfully!`, 
+          severity: 'success',
+          modePreference: sessionConfig.mode,
+          enableRecording: sessionConfig.enableRecording
         } 
       });
+      console.log('[HomePage] Navigation completed');
     } catch (error) {
-      console.error("Error creating session:", error);
-      setAlertMessage({ text: "Failed to create session. Please try again.", severity: 'error' });
+      console.error("[HomePage] Error creating session record:", error);
+      setAlertMessage({ text: "Failed to create session record. Please try again.", severity: 'error' });
     } finally {
-      setLoading(false);
+      setIsStartingSession(false);
+      setSessionConfig(null);
     }
-  };
+  }, [currentUser, sessionConfig, navigate]);
 
-  const handleUpdatePrivacy = async (sessionId: string, isPublic: boolean) => {
+  const handleSessionError = useCallback((error: string) => {
+    setAlertMessage({ text: error, severity: 'error' });
+    setIsStartingSession(false);
+    setSessionConfig(null);
+  }, []);
+
+  const handleUpdatePrivacy = useCallback(async (sessionId: string, isPublic: boolean) => {
     try {
-      await updateDoc(doc(db, 'sessions', sessionId), { isPublic });
+      await updateDoc(doc(db, 'sessions', sessionId), { 
+        'options.privacy': isPublic ? 'public' : 'private' 
+      });
     } catch (error) {
       console.error("Error updating session privacy:", error);
       alert("Failed to update privacy settings.");
     }
-  };
+  }, []);
 
-  const handleDeleteSession = async (sessionId: string) => {
+  const handleDeleteSession = useCallback(async (sessionId: string) => {
     if (window.confirm("Are you sure you want to delete this session?")) {
       try {
         await deleteDoc(doc(db, 'sessions', sessionId));
@@ -117,15 +152,53 @@ const HomePage: React.FC = () => {
         alert("Failed to delete session.");
       }
     }
-  };
+  }, []);
+
+  const handleClearNamespace = useCallback(async () => {
+    if (!currentUser) {
+      setAlertMessage({ text: 'You must be logged in to perform this action.', severity: 'warning' });
+      return;
+    }
+
+    if (window.confirm("Are you sure you want to delete your namespace? This action is irreversible and will delete all your running sessions and associated data.")) {
+      setIsClearingNamespace(true);
+      try {
+        const token = sessionStorage.getItem('token');
+        if (!token) {
+          throw new Error('Authentication token not found.');
+        }
+
+        const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:80';
+        const response = await fetch(`${BACKEND_URL}/namespace`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          setAlertMessage({ text: data.message || 'Namespace cleared successfully.', severity: 'success' });
+        } else {
+          throw new Error(data.error || 'Failed to clear namespace.');
+        }
+      } catch (error) {
+        console.error("Error clearing namespace:", error);
+        setAlertMessage({ text: error instanceof Error ? error.message : 'An unknown error occurred.', severity: 'error' });
+      } finally {
+        setIsClearingNamespace(false);
+      }
+    }
+  }, [currentUser]);
 
   const filteredSessions = sessions.filter(session => 
     session.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    session.ownerName.toLowerCase().includes(searchQuery.toLowerCase())
+    session.owner.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const publicSessions = filteredSessions.filter(session => session.isPublic);
-  const privateSessions = filteredSessions.filter(session => !session.isPublic && session.ownerId === currentUser?.uid);
+  const publicSessions = filteredSessions.filter(session => session.options.privacy === 'public');
+  const privateSessions = filteredSessions.filter(session => session.options.privacy === 'private' && session.owner.uid === currentUser?.uid);
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -140,6 +213,14 @@ const HomePage: React.FC = () => {
             {alertMessage.text}
           </Alert>
         </Snackbar>
+      )}
+
+      {isStartingSession && sessionConfig && (
+        <SessionManager
+          enableRecording={sessionConfig.enableRecording}
+          onSessionReady={handleSessionReady}
+          onError={handleSessionError}
+        />
       )}
 
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 space-y-4 md:space-y-0">
@@ -161,10 +242,20 @@ const HomePage: React.FC = () => {
           
           <button
             onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-400 dark:focus:ring-offset-slate-900"
+            disabled={isStartingSession}
+            className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-400 dark:focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="h-5 w-5 mr-1" />
             Create Session
+          </button>
+
+          <button
+            onClick={handleClearNamespace}
+            disabled={isClearingNamespace || isStartingSession}
+            className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 dark:bg-red-700 dark:hover:bg-red-600 dark:focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Trash2 className="h-5 w-5 mr-1" />
+            {isClearingNamespace ? 'Clearing...' : 'Clear Namespace'}
           </button>
         </div>
       </div>
@@ -190,7 +281,7 @@ const HomePage: React.FC = () => {
                 session={session}
                 onUpdatePrivacy={handleUpdatePrivacy}
                 onDelete={handleDeleteSession}
-                isOwner={session.ownerId === currentUser?.uid}
+                isOwner={session.owner.uid === currentUser?.uid}
               />
             ))}
           </div>
@@ -207,7 +298,7 @@ const HomePage: React.FC = () => {
                 session={session}
                 onUpdatePrivacy={handleUpdatePrivacy}
                 onDelete={handleDeleteSession}
-                isOwner={session.ownerId === currentUser?.uid}
+                isOwner={session.owner.uid === currentUser?.uid}
               />
             ))}
           </div>

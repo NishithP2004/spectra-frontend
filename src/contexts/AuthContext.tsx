@@ -47,6 +47,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       setLoading(false);
+      if (user) {
+        user.getIdToken(true).then((idToken) => {
+          sessionStorage.setItem("token", idToken);
+          console.log("Firebase ID Token saved to sessionStorage.");
+        }).catch((error) => {
+          console.error("Error getting ID token for sessionStorage:", error);
+          sessionStorage.removeItem("token"); // Clear if token retrieval fails
+        });
+      } else {
+        sessionStorage.removeItem("token");
+        console.log("User signed out, token removed from sessionStorage.");
+      }
     });
 
     return unsubscribe;

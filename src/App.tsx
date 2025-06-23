@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { SessionProvider } from './contexts/SessionContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import Navbar from './components/layout/Navbar';
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -51,9 +52,11 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <ThemeProvider>
-          <AppRoutes />
-        </ThemeProvider>
+        <SessionProvider>
+          <ThemeProvider>
+            <AppRoutes />
+          </ThemeProvider>
+        </SessionProvider>
       </AuthProvider>
     </Router>
   );

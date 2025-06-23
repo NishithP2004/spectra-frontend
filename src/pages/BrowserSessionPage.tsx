@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useSession } from '../contexts/SessionContext';
 import VncDisplay from '../components/session/VncDisplay';
 import ChatInterface from '../components/chat/ChatInterface';
 import LoadingSpinner from '../components/common/LoadingSpinner';
-import { Session } from '../components/session/SessionCard';
+import { Session } from '../types/session';
 import { LogEntry } from '../components/chat/ActivityLogItem';
 import { ArrowLeft, X, MessageSquare } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
@@ -20,6 +21,7 @@ interface PageAlert {
 const BrowserSessionPage: React.FC = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { currentUser } = useAuth();
+  const { sessionState, endSession } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
   const { theme } = useTheme();
@@ -29,139 +31,52 @@ const BrowserSessionPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [activityLog, setActivityLog] = useState<LogEntry[]>([]);
   const [chatOpen, setChatOpen] = useState(true); // For mobile view
-  const [pageAlert, setPageAlert] = useState<PageAlert | null>(null); // For general page alerts
+  const [pageAlert, setPageAlert] = useState<PageAlert | null>(null);
   
-  const isHackingMode = session?.mode === "Hacking Mode";
-
-  // Ref to track initialization state to prevent double calls in StrictMode
-  const initializationStateRef = useRef<{ status: 'idle' | 'pending' | 'done'; key: string | null }>({ status: 'idle', key: null });
+  const isHackingMode = session?.options.mode === "Hacking";
 
   useEffect(() => {
-    // Check for messages passed via route state (e.g., session creation success)
     if (location.state?.message && location.state?.severity) {
       setPageAlert({ text: location.state.message, severity: location.state.severity as AlertColor });
       navigate(location.pathname, { replace: true, state: {} });
-      // Snackbar's autoHideDuration will handle hiding.
     }
   }, [location, navigate]);
 
-  // Fetch session details and initialize agent session
   useEffect(() => {
-    if (!sessionId) {
-      setError("Session ID is missing or invalid.");
-      setSession(null);
+    if (sessionState.isActive && sessionState.session_id === sessionId) {
+      const mode = location.state?.modePreference === "Hacking Mode" ? "Hacking" : "Normal";
+      const newSession: Session = {
+        id: sessionState.session_id,
+        title: location.state?.title || (mode === 'Hacking' ? 'Hacking Environment' : 'Secure Browsing Session'),
+        createdAt: new Date(),
+        owner: {
+          uid: currentUser!.uid,
+          name: currentUser!.displayName || 'User',
+          photo: currentUser!.photoURL || '',
+        },
+        options: {
+          enableRecording: location.state?.enableRecording || false,
+          mode: mode,
+          privacy: 'public',
+        },
+      };
+      setSession(newSession);
+      setActivityLog([{ 
+        source: 'system', 
+        message: `Session "${newSession.title}" is active. Agent ready.`,
+        timestamp: new Date() 
+      }]);
       setLoading(false);
-      initializationStateRef.current = { status: 'idle', key: null };
-      return;
-    }
-    if (!currentUser) {
-      setError("User not authenticated. Cannot initialize session.");
-      setSession(null);
+      setError(null);
+    } else if (sessionState.isLoading) {
+      setLoading(true);
+      setError(null);
+    } else if (!sessionState.isActive && !sessionState.isLoading) {
+      setError("Session is not active or could not be found.");
       setLoading(false);
-      initializationStateRef.current = { status: 'idle', key: null };
-      return;
     }
+  }, [sessionState, sessionId, currentUser, location.state]);
 
-    const currentKey = `${sessionId}-${currentUser.uid}`;
-
-    // Prevent re-initialization if already done or pending for the same key
-    if (
-      initializationStateRef.current.key === currentKey &&
-      (initializationStateRef.current.status === 'done' || initializationStateRef.current.status === 'pending')
-    ) {
-      // console.log(`Skipping initialization for key ${currentKey}, status: ${initializationStateRef.current.status}`);
-      // If it was 'done' and loading is true, it might mean deps changed then changed back.
-      // Ensure loading is false if we skip and status is 'done'.
-      if (initializationStateRef.current.status === 'done' && loading) {
-        setLoading(false);
-      }
-      return;
-    }
-    
-    initializationStateRef.current = { status: 'pending', key: currentKey };
-    setLoading(true);
-    setError(null);
-    setSession(null); // Clear previous session data
-
-    const initializeFullSession = async () => {
-      try {
-        // Step 1: Create or confirm agent session
-        const agentSessionUrl = `http://localhost:8000/apps/spectra-agent/users/${currentUser.uid}/sessions/${sessionId}`;
-        const response = await fetch(agentSessionUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ state: {} }), // Optional state
-        });
-
-        if (!response.ok) {
-          let errorDetail = `Failed to create agent session: ${response.status}`;
-          try {
-            const errorData = await response.json();
-            errorDetail = errorData.detail || errorDetail;
-            // Check for "Session already exists" as per documentation
-            if (response.status === 400 && errorDetail.includes("Session already exists")) {
-              console.log("Agent session already exists (confirmed by server):", sessionId);
-              // This is not a fatal error; proceed.
-            } else {
-              throw new Error(errorDetail); // Throw detailed error from server
-            }
-          } catch (parseError) {
-            // If response.json() fails or it's not the specific "already exists" case
-            console.error("Error parsing agent session error response or unexpected error:", parseError);
-            throw new Error(errorDetail); // Throw the status-based error detail
-          }
-        } else {
-          console.log("Agent session successfully created/confirmed for:", sessionId);
-          // const agentData = await response.json(); // Process if needed
-        }
-
-        // Step 2: Determine intended mode and set (Spectra) session details
-        const intendedModeFromState = location.state?.modePreference === "Hacking Mode" ? "Hacking Mode" : "Normal Mode";
-        const isActuallyHackingMode = intendedModeFromState === "Hacking Mode";
-
-        const mockSessionData: Session = {
-          id: sessionId,
-          title: isActuallyHackingMode ? 'Hacking Environment' : 'Secure Browsing Session',
-          mode: intendedModeFromState, // Use the determined mode
-          ownerId: currentUser.uid,
-          ownerName: currentUser.displayName || 'User',
-          ownerPhotoURL: currentUser.photoURL || undefined,
-          isPublic: true,
-          duration: '00:00',
-          thumbnailUrl: `https://picsum.photos/seed/${sessionId}/320/180`,
-          createdAt: new Date(),
-          vncUrl: 'ws://localhost:7900',
-        };
-        setSession(mockSessionData);
-        setActivityLog([{ 
-          source: 'system', 
-          message: `Session "${mockSessionData.title}" started in ${mockSessionData.mode}. Agent ready.`,
-          timestamp: new Date() 
-        }]);
-
-        // Display an alert for the session start mode
-        setPageAlert({ text: `Starting session in ${mockSessionData.mode}`, severity: 'info' });
-        
-        initializationStateRef.current = { status: 'done', key: currentKey };
-        setLoading(false);
-
-      } catch (initError) {
-        const errorMessage = initError instanceof Error ? initError.message : String(initError);
-        console.error("Error during full session initialization:", errorMessage);
-        setError(`Failed to initialize session: ${errorMessage}`);
-        initializationStateRef.current = { status: 'idle', key: currentKey }; // Reset to idle for this key on error
-        setLoading(false);
-        setSession(null);
-      }
-    };
-
-    initializeFullSession();
-
-  }, [sessionId, currentUser, location.state]); // Dependencies
-
-  // Apply hack mode theme to body
   useEffect(() => {
     if (isHackingMode) {
       document.body.classList.add('hacker-theme');
@@ -169,13 +84,11 @@ const BrowserSessionPage: React.FC = () => {
       document.body.classList.remove('hacker-theme');
     }
     
-    // Cleanup on unmount
     return () => {
       document.body.classList.remove('hacker-theme');
     };
   }, [isHackingMode]);
-
-  // Handle user messages from chat
+  
   const handleUserMessage = useCallback(async (message: { type: string, content: string }) => {
     if (!currentUser || !sessionId) return;
 
@@ -189,16 +102,18 @@ const BrowserSessionPage: React.FC = () => {
 
     // API call to the AI agent using /run_sse
     try {
-      const response = await fetch('http://localhost:8000/run_sse', { // Changed to /run_sse
+      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:80';
+      const response = await fetch(`${BACKEND_URL}/agent/run_sse`, { // Changed to /run_sse
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionStorage.getItem("token")}`
         },
         body: JSON.stringify({
-          app_name: 'spectra-agent', // Consistent with previous agent name
-          user_id: currentUser.uid,
-          session_id: sessionId,
-          new_message: {
+          appName: 'spectra-agent', // Consistent with previous agent name
+          userId: currentUser.uid,
+          sessionId: sessionId,
+          newMessage: {
             role: 'user',
             parts: [{ text: message.content }],
           },
@@ -339,119 +254,126 @@ const BrowserSessionPage: React.FC = () => {
       setActivityLog(prev => [...prev, errorLogEntry]);
     }
   }, [currentUser, sessionId]);
-
-  // Handle ending session
-  const handleEndSession = () => {
+  
+  const handleEndSession = async () => {
     if (window.confirm("Are you sure you want to end this session?")) {
-      navigate('/');
+      try {
+        const result = await endSession();
+        if (result.success) {
+          setPageAlert({ text: result.message, severity: 'success' });
+          // Navigate back to home after a short delay
+          setTimeout(() => {
+            navigate('/', { 
+              state: { 
+                message: 'Session ended successfully', 
+                severity: 'success' 
+              } 
+            });
+          }, 2000);
+        } else {
+          setPageAlert({ text: result.message, severity: 'error' });
+        }
+      } catch (error) {
+        console.error('Error ending session:', error);
+        setPageAlert({ 
+          text: error instanceof Error ? error.message : 'Failed to end session', 
+          severity: 'error' 
+        });
+      }
     }
   };
 
-  if (loading) return <LoadingSpinner fullPage />;
-  
-  if (error) {
-    return (
-      <div className="min-h-[calc(100vh-64px)] flex flex-col items-center justify-center p-4 bg-gray-100 dark:bg-slate-900">
-        <Alert severity="error" className="w-full max-w-lg mb-4">
-          {error}
-        </Alert>
-        <button
-          onClick={() => navigate('/')}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 transition-colors"
-        >
-          Back to Home
-        </button>
-      </div>
-    );
+  const vncUrl = useMemo(() => {
+    if (sessionState.isActive && currentUser) {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:80';
+      // Replace http/https with ws/wss for the websocket connection
+      const wsUrl = backendUrl.replace(/^http/, 'ws');
+      return `${wsUrl}/vnc?uid=${currentUser.uid}`;
+    }
+    return '';
+  }, [sessionState.isActive, currentUser]);
+
+  if (loading) {
+    return <LoadingSpinner fullPage />;
   }
 
-  if (!session) {
+  if (error) {
     return (
-      <div className="min-h-[calc(100vh-64px)] flex flex-col items-center justify-center p-4 bg-gray-100 dark:bg-slate-900">
-        <Alert severity="warning" className="w-full max-w-lg mb-4">
-          Session data could not be loaded. Please try again later.
-        </Alert>
+      <div className="flex flex-col items-center justify-center h-screen bg-gray-100 dark:bg-slate-900 text-red-500">
+        <h2 className="text-2xl font-semibold mb-4">{error}</h2>
         <button
           onClick={() => navigate('/')}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 transition-colors"
+          className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
         >
-          Back to Home
+          Go to Homepage
         </button>
       </div>
     );
   }
 
   return (
-    <div className={`relative flex flex-col h-[calc(100vh-64px)] ${isHackingMode ? 'hacker-theme-bg text-green-400' : 'bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-gray-100'}`}>
-      {/* Page-level Alert Snackbar Display Area */}
-      {pageAlert && (
-        <Snackbar
-          open={Boolean(pageAlert)}
-          autoHideDuration={5000}
-          onClose={() => setPageAlert(null)}
-          anchorOrigin={{ vertical: 'top', horizontal: 'center' }} // Or other preferred position
-          // Adding a key ensures the Snackbar remounts and shows animation if message changes rapidly
-          key={pageAlert.text} 
-        >
-          <Alert onClose={() => setPageAlert(null)} severity={pageAlert.severity} sx={{ width: '100%' }}>
-            {pageAlert.text}
-          </Alert>
-        </Snackbar>
-      )}
+    <div className={`flex h-screen font-sans antialiased overflow-hidden ${isHackingMode ? 'hacker-theme' : ''} bg-slate-50 dark:bg-slate-900`}>
+      <main className="flex-1 flex flex-col relative">
+        <header className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shadow-sm z-10">
+          <button onClick={() => navigate('/')} className="flex items-center text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400">
+            <ArrowLeft className="w-5 h-5 mr-1" />
+            Back to Sessions
+          </button>
+          <div className="text-center">
+            <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100 truncate">{session?.title}</h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400">ID: {sessionId}</p>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setChatOpen(!chatOpen)}
+              className="md:hidden p-2 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600"
+            >
+              <MessageSquare className="w-5 h-5" />
+            </button>
+            <button 
+              onClick={handleEndSession} 
+              className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
+              End Session
+            </button>
+          </div>
+        </header>
 
-      {/* Top bar for session title and End Session button (replaces the old inline header) */}
-      <div className={`p-3 flex items-center justify-between border-b ${isHackingMode ? 'border-green-700 bg-gray-900' : 'border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800'} shadow-sm`}>
-        <h1 className={`text-lg font-semibold ${isHackingMode ? 'text-green-300' : 'text-gray-900 dark:text-gray-100'}`}>
-          {session.title}
-        </h1>
-        <button
-          onClick={handleEndSession}
-          className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-            isHackingMode 
-              ? 'bg-red-900/80 text-red-300 hover:bg-red-800/80' 
-              : 'bg-red-600 text-white hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600'
-          }`}
-        >
-          End Session
-        </button>
-      </div>
+        <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 flex flex-col bg-black">
+            {sessionState.isActive && sessionState.vnc_passwd && (
+              <VncDisplay
+                url={vncUrl}
+                vncPassword={sessionState.vnc_passwd}
+              />
+            )}
+          </div>
+
+          <div className={`
+            w-full md:w-96 flex-shrink-0 bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 
+            transition-transform duration-300 ease-in-out 
+            ${chatOpen ? 'translate-x-0' : 'translate-x-full'} 
+            md:translate-x-0 md:relative absolute top-0 right-0 h-full z-20 md:z-auto
+          `}>
+            <ChatInterface
+              activityLog={activityLog}
+              onSendMessage={handleUserMessage}
+              sessionId={sessionId!}
+            />
+          </div>
+        </div>
+      </main>
       
-      {/* Main content area with VNC display and chat */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* VNC Panel */}
-        <div className={`flex-1 p-1 ${chatOpen && !isHackingMode ? 'hidden lg:block' : 'block'} ${isHackingMode ? 'border-r border-green-700' : 'border-r dark:border-slate-700'}`}>
-          <VncDisplay 
-            url={session.vncUrl || 'ws://localhost:7900'} 
-            isHackingMode={isHackingMode} 
-            vncPassword="secret"
-          />
-        </div>
-        
-        {/* Chat Panel - Conditional rendering for mobile */}
-        <div className={`lg:w-1/3 xl:w-1/4 h-full ${chatOpen ? 'block' : 'hidden lg:block'} ${isHackingMode ? 'bg-gray-900 border-l border-green-700' : 'bg-gray-100 dark:bg-slate-800 border-l dark:border-slate-700'}`}>
-          <ChatInterface 
-            onSendMessage={handleUserMessage} 
-            activityLog={activityLog}
-            isHackingMode={isHackingMode}
-            currentUser={currentUser}
-            sessionId={sessionId!}
-          />
-        </div>
-      </div>
-        
-      {/* Mobile toggle button for chat - Stays at bottom right */}
-      {!isHackingMode && (
-         <button
-            onClick={() => setChatOpen(!chatOpen)}
-            className={`fixed bottom-4 right-4 lg:hidden z-20 p-3 rounded-full shadow-lg transition-colors ${
-                isHackingMode 
-                ? 'bg-green-700/80 text-green-300 hover:bg-green-600/80' 
-                : 'bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400'
-            }`}
-        >
-            {chatOpen ? <X className="h-6 w-6" /> : <MessageSquare className="h-6 w-6" /> }
-        </button>
-      )}
+      <Snackbar
+        open={Boolean(pageAlert)}
+        autoHideDuration={6000}
+        onClose={() => setPageAlert(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setPageAlert(null)} severity={pageAlert?.severity} sx={{ width: '100%' }}>
+          {pageAlert?.text}
+        </Alert>
+      </Snackbar>
     </div>
   );
 };

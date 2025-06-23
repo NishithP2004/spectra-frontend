@@ -6,6 +6,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faDesktop } from '@fortawesome/free-solid-svg-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Moon, Sun } from 'lucide-react';
+import ProfileCard from '../common/ProfileCard';
 
 const Navbar: React.FC = () => {
   const { currentUser, logout } = useAuth();
@@ -34,6 +35,10 @@ const Navbar: React.FC = () => {
     }, 300); // 300ms delay before closing
   };
 
+  const handleDropdownClick = () => {
+    setIsDropdownOpen(!isDropdownOpen);
+  };
+
   return (
     <nav className="bg-white/30 backdrop-blur-md text-black shadow-md fixed top-0 left-0 right-0 z-10 dark:bg-slate-800/30 dark:text-white">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -51,7 +56,10 @@ const Navbar: React.FC = () => {
             </button>
             {currentUser ? (
               <div className="relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
-                <button className="flex items-center space-x-2 bg-gray-100 dark:bg-slate-700 p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600 transition">
+                <button 
+                  onClick={handleDropdownClick}
+                  className="flex items-center space-x-2 bg-gray-100 dark:bg-slate-700 p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600 transition"
+                >
                   {currentUser.photoURL && (
                     <img 
                       src={currentUser.photoURL} 
@@ -62,19 +70,10 @@ const Navbar: React.FC = () => {
                   <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{currentUser.displayName || currentUser.email}</span>
                 </button>
                 {isDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-md shadow-lg py-1 z-20">
-                    <div className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
-                      <div className="font-bold">{currentUser.displayName}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">{currentUser.email}</div>
-                </div>
-                    <div className="border-t border-gray-100 dark:border-slate-700"></div>
-                    <a href="#" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700">Profile</a>
-                <button 
-                  onClick={handleLogout}
-                      className="block w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-slate-700"
-                >
-                      Sign out
-                </button>
+                  <div className="absolute right-0 mt-2 bg-white dark:bg-slate-800 rounded-lg shadow-xl py-2 z-20 min-w-[320px]">
+                    <div className="px-4 py-2">
+                      <ProfileCard />
+                    </div>
                   </div>
                 )}
               </div>
