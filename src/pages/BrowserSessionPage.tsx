@@ -310,7 +310,7 @@ const BrowserSessionPage: React.FC = () => {
     if (sessionState.isActive && currentUser) {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:80';
       // Replace http/https with ws for the websocket connection
-      const wsUrl = backendUrl.replace(/https?/, 'ws');
+      const wsUrl = backendUrl.replace(/https?/, 'wss');
       return `${wsUrl}/vnc?uid=${currentUser.uid}`;
     }
     return '';
