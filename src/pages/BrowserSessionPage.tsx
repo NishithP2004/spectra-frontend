@@ -7,8 +7,7 @@ import ChatInterface from '../components/chat/ChatInterface';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { Session } from '../types/session';
 import { LogEntry } from '../components/chat/ActivityLogItem';
-import { ArrowLeft, X, MessageSquare, Monitor, Copy, Check, RefreshCw, Shield } from 'lucide-react';
-import { useTheme } from '../contexts/ThemeContext';
+import { ArrowLeft, MessageSquare, Monitor, Copy, Check, RefreshCw, Shield, MoreVertical, Clock, Hash } from 'lucide-react';
 import Alert, { AlertColor } from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 
@@ -24,13 +23,11 @@ const BrowserSessionPage: React.FC = () => {
   const { sessionState, endSession } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
-  const { theme } = useTheme();
   
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activityLog, setActivityLog] = useState<LogEntry[]>([]);
-  const [chatOpen, setChatOpen] = useState(true); // For mobile view
   const [pageAlert, setPageAlert] = useState<PageAlert | null>(null);
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
   const [currentDuration, setCurrentDuration] = useState<number>(0);
@@ -38,6 +35,12 @@ const BrowserSessionPage: React.FC = () => {
   const [mobileView, setMobileView] = useState<'vnc' | 'chat'>('vnc'); // Mobile view state
   const [showVncDetails, setShowVncDetails] = useState(false);
   const [tokenRefreshStatus, setTokenRefreshStatus] = useState<'idle' | 'refreshing' | 'success' | 'error'>('idle');
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null);
+  const [showIdTooltip, setShowIdTooltip] = useState(false);
+  const [showStatusTooltip, setShowStatusTooltip] = useState(false);
+  const idTooltipRef = useRef<HTMLDivElement | null>(null);
+  const statusTooltipRef = useRef<HTMLDivElement | null>(null);
   
   const isHackingMode = session?.options.mode === "Hacking";
 
@@ -364,13 +367,23 @@ const BrowserSessionPage: React.FC = () => {
           setShowVncDetails(false);
         }
       }
+      // Close mobile menu if click outside
+      if (showMobileMenu && mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
+        setShowMobileMenu(false);
+      }
+      if (showIdTooltip && idTooltipRef.current && !idTooltipRef.current.contains(event.target as Node)) {
+        setShowIdTooltip(false);
+      }
+      if (showStatusTooltip && statusTooltipRef.current && !statusTooltipRef.current.contains(event.target as Node)) {
+        setShowStatusTooltip(false);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showVncDetails]);
+  }, [showVncDetails, showMobileMenu, showIdTooltip, showStatusTooltip]);
 
   if (loading) {
     return <LoadingSpinner fullPage />;
@@ -393,14 +406,15 @@ const BrowserSessionPage: React.FC = () => {
   return (
     <div className={`flex h-screen font-sans antialiased overflow-hidden ${isHackingMode ? 'hacker-theme' : ''} bg-slate-50 dark:bg-slate-900`}>
       <main className="flex-1 flex flex-col relative">
-        <header className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shadow-sm z-10">
-          <button onClick={() => navigate('/')} className="flex items-center text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400">
-            <ArrowLeft className="w-5 h-5 mr-1" />
-            Back to Sessions
+        <header className="flex items-center justify-between p-3 gap-2 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shadow-sm z-10">
+          <button onClick={() => navigate('/')} aria-label="Back to Sessions" className="flex items-center text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 shrink-0">
+            <ArrowLeft className="w-5 h-5" />
+            <span className="hidden sm:inline ml-1">Back to Sessions</span>
           </button>
-          <div className="text-center flex-1 mx-4">
+          <div className="text-center flex-1 min-w-0 mx-2 md:mx-4">
             <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100 truncate">{session?.title}</h1>
-            <div className="flex items-center justify-center space-x-4 text-xs text-slate-500 dark:text-slate-400">
+            {/* Desktop: full text details */}
+            <div className="hidden md:flex items-center justify-center space-x-4 text-xs text-slate-500 dark:text-slate-400">
               <span>ID: {sessionId}</span>
               <span>•</span>
               <span>Duration: {formatDuration(currentDuration)}</span>
@@ -410,8 +424,52 @@ const BrowserSessionPage: React.FC = () => {
                 <span>Session Active</span>
               </div>
             </div>
+            {/* Mobile: compact icons with tooltips */}
+            <div className="flex md:hidden items-center justify-center space-x-4 text-slate-500 dark:text-slate-400">
+              {/* ID icon with click tooltip */}
+              <div className="relative" ref={idTooltipRef}>
+                <button
+                  onClick={() => setShowIdTooltip((v) => !v)}
+                  className="flex items-center p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
+                  aria-haspopup="dialog"
+                  aria-expanded={showIdTooltip}
+                  aria-label={`Session ID: ${sessionId}`}
+                >
+                  <Hash className="w-4 h-4" />
+                </button>
+                {showIdTooltip && (
+                  <div className="absolute left-1/2 -translate-x-1/2 mt-2 whitespace-nowrap bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 px-2 py-1 rounded shadow z-50">
+                    Session ID: {sessionId}
+                  </div>
+                )}
+              </div>
+
+              {/* Duration always visible */}
+              <div className="flex items-center" aria-label={`Duration: ${formatDuration(currentDuration)}`}>
+                <Clock className="w-4 h-4 mr-1" />
+                <span className="text-xs text-slate-600 dark:text-slate-300">{formatDuration(currentDuration)}</span>
+              </div>
+              
+              {/* Status icon with click tooltip */}
+              <div className="relative" ref={statusTooltipRef}>
+                <button
+                  onClick={() => setShowStatusTooltip((v) => !v)}
+                  className="flex items-center p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
+                  aria-haspopup="dialog"
+                  aria-expanded={showStatusTooltip}
+                  aria-label="Session Active"
+                >
+                  <Shield className="w-4 h-4" />
+                </button>
+                {showStatusTooltip && (
+                  <div className="absolute left-1/2 -translate-x-1/2 mt-2 whitespace-nowrap bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 px-2 py-1 rounded shadow z-50">
+                    Session Active
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 shrink-0">
             {/* VNC Info Copy Button - Desktop only */}
             <div className="hidden md:block relative" data-vnc-details>
               <button
@@ -483,35 +541,69 @@ const BrowserSessionPage: React.FC = () => {
               )}
             </div>
             
-            {/* Token Refresh Button */}
-            <button
-              onClick={handleTokenRefresh}
-              disabled={tokenRefreshStatus === 'refreshing'}
-              className={`flex items-center space-x-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                tokenRefreshStatus === 'refreshing'
-                  ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 cursor-not-allowed'
-                  : tokenRefreshStatus === 'success'
-                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                  : tokenRefreshStatus === 'error'
-                  ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-                  : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
-              }`}
-              title="Refresh authentication token"
-            >
-              <RefreshCw className={`w-4 h-4 ${tokenRefreshStatus === 'refreshing' ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">
-                {tokenRefreshStatus === 'refreshing' ? 'Refreshing...' : 
-                 tokenRefreshStatus === 'success' ? 'Refreshed!' :
-                 tokenRefreshStatus === 'error' ? 'Failed' : 'Refresh Token'}
-              </span>
-            </button>
-            
-            <button 
-              onClick={handleEndSession} 
-              className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-            >
-              End Session
-            </button>
+            {/* Desktop action buttons */}
+            <div className="hidden md:flex items-center space-x-2">
+              {/* Token Refresh Button */}
+              <button
+                onClick={handleTokenRefresh}
+                disabled={tokenRefreshStatus === 'refreshing'}
+                className={`flex items-center space-x-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  tokenRefreshStatus === 'refreshing'
+                    ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 cursor-not-allowed'
+                    : tokenRefreshStatus === 'success'
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                    : tokenRefreshStatus === 'error'
+                    ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                    : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                }`}
+                title="Refresh authentication token"
+              >
+                <RefreshCw className={`w-4 h-4 ${tokenRefreshStatus === 'refreshing' ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">
+                  {tokenRefreshStatus === 'refreshing' ? 'Refreshing...' : 
+                   tokenRefreshStatus === 'success' ? 'Refreshed!' :
+                   tokenRefreshStatus === 'error' ? 'Failed' : 'Refresh Token'}
+                </span>
+              </button>
+              
+              <button 
+                onClick={handleEndSession} 
+                className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              >
+                End Session
+              </button>
+            </div>
+
+            {/* Mobile kebab menu */}
+            <div className="md:hidden relative" ref={mobileMenuRef}>
+              <button
+                onClick={() => setShowMobileMenu((v) => !v)}
+                className="p-2 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600"
+                aria-haspopup="menu"
+                aria-expanded={showMobileMenu}
+                title="More actions"
+              >
+                <MoreVertical className="w-5 h-5" />
+              </button>
+              {showMobileMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg py-2 z-50">
+                  <button
+                    onClick={() => { setShowMobileMenu(false); handleTokenRefresh(); }}
+                    className="w-full flex items-center justify-start px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-2 ${tokenRefreshStatus === 'refreshing' ? 'animate-spin' : ''}`} />
+                    {tokenRefreshStatus === 'refreshing' ? 'Refreshing…' : 'Refresh Token'}
+                  </button>
+                  <div className="my-1 h-px bg-slate-200 dark:bg-slate-700" />
+                  <button
+                    onClick={() => { setShowMobileMenu(false); handleEndSession(); }}
+                    className="w-full flex items-center justify-start px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                  >
+                    End Session
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 

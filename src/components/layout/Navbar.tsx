@@ -59,21 +59,21 @@ const Navbar: React.FC = () => {
 
   return (
     <nav className="bg-white/30 backdrop-blur-md text-black shadow-md fixed top-0 left-0 right-0 z-10 dark:bg-slate-800/30 dark:text-white">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="container mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          <div className="flex items-center">
+          <div className="flex items-center min-w-0">
             <Link to="/" className="flex items-center gap-2 text-2xl font-bold hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
               <FontAwesomeIcon icon={faDesktop} className="h-6 w-6 text-blue-500 dark:text-blue-400" />
               <span>Spectra</span>
             </Link>
           </div>
           
-          <div className="flex items-center space-x-6">
-            <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition">
+          <div className="flex items-center space-x-3 sm:space-x-6">
+            <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition shrink-0">
               {theme === 'light' ? <Moon className="h-6 w-6" /> : <Sun className="h-6 w-6" />}
             </button>
             {currentUser ? (
-              <div ref={dropdownRef} className="relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} style={{ zIndex: 1000 }}>
+              <div ref={dropdownRef} className="relative shrink-0" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} style={{ zIndex: 1000 }}>
                 <button 
                   onClick={handleDropdownClick}
                   className="flex items-center space-x-2 bg-gray-100 dark:bg-slate-700 p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600 transition"
@@ -85,7 +85,7 @@ const Navbar: React.FC = () => {
                       className="h-8 w-8 rounded-full border border-slate-300 dark:border-slate-600"
                     />
                   )}
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{currentUser.displayName || currentUser.email}</span>
+                  <span className="hidden sm:inline text-sm font-medium text-gray-900 dark:text-gray-100 max-w-[200px] truncate">{currentUser.displayName || currentUser.email}</span>
                 </button>
                 {isDropdownOpen && (
                   <div className="absolute right-0 mt-2 bg-white dark:bg-slate-800 rounded-lg shadow-xl py-2 z-40 min-w-[320px] max-h-[85vh] overflow-y-auto transform -translate-y-0" style={{ top: '100%', right: '0', maxHeight: 'calc(100vh - 120px)' }}>
