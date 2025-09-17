@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Monitor, LogOut } from 'lucide-react';
@@ -14,6 +14,7 @@ const Navbar: React.FC = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   let timeoutId: NodeJS.Timeout;
   const { theme, toggleTheme } = useTheme();
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const handleLogout = async () => {
     try {
@@ -39,6 +40,23 @@ const Navbar: React.FC = () => {
     setIsDropdownOpen(!isDropdownOpen);
   };
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isDropdownOpen]);
+
   return (
     <nav className="bg-white/30 backdrop-blur-md text-black shadow-md fixed top-0 left-0 right-0 z-10 dark:bg-slate-800/30 dark:text-white">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -55,7 +73,7 @@ const Navbar: React.FC = () => {
               {theme === 'light' ? <Moon className="h-6 w-6" /> : <Sun className="h-6 w-6" />}
             </button>
             {currentUser ? (
-              <div className="relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+              <div ref={dropdownRef} className="relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} style={{ zIndex: 1000 }}>
                 <button 
                   onClick={handleDropdownClick}
                   className="flex items-center space-x-2 bg-gray-100 dark:bg-slate-700 p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600 transition"
@@ -70,7 +88,7 @@ const Navbar: React.FC = () => {
                   <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{currentUser.displayName || currentUser.email}</span>
                 </button>
                 {isDropdownOpen && (
-                  <div className="absolute right-0 mt-2 bg-white dark:bg-slate-800 rounded-lg shadow-xl py-2 z-20 min-w-[320px]">
+                  <div className="absolute right-0 mt-2 bg-white dark:bg-slate-800 rounded-lg shadow-xl py-2 z-40 min-w-[320px] max-h-[85vh] overflow-y-auto transform -translate-y-0" style={{ top: '100%', right: '0', maxHeight: 'calc(100vh - 120px)' }}>
                     <div className="px-4 py-2">
                       <ProfileCard />
                     </div>

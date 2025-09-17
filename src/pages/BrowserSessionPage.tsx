@@ -7,7 +7,7 @@ import ChatInterface from '../components/chat/ChatInterface';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { Session } from '../types/session';
 import { LogEntry } from '../components/chat/ActivityLogItem';
-import { ArrowLeft, X, MessageSquare } from 'lucide-react';
+import { ArrowLeft, X, MessageSquare, Monitor, Copy, Check, RefreshCw, Shield } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import Alert, { AlertColor } from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
@@ -20,7 +20,7 @@ interface PageAlert {
 
 const BrowserSessionPage: React.FC = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { currentUser } = useAuth();
+  const { currentUser, refreshToken } = useAuth();
   const { sessionState, endSession } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
@@ -32,6 +32,12 @@ const BrowserSessionPage: React.FC = () => {
   const [activityLog, setActivityLog] = useState<LogEntry[]>([]);
   const [chatOpen, setChatOpen] = useState(true); // For mobile view
   const [pageAlert, setPageAlert] = useState<PageAlert | null>(null);
+  const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
+  const [currentDuration, setCurrentDuration] = useState<number>(0);
+  const [copiedItem, setCopiedItem] = useState<string | null>(null);
+  const [mobileView, setMobileView] = useState<'vnc' | 'chat'>('vnc'); // Mobile view state
+  const [showVncDetails, setShowVncDetails] = useState(false);
+  const [tokenRefreshStatus, setTokenRefreshStatus] = useState<'idle' | 'refreshing' | 'success' | 'error'>('idle');
   
   const isHackingMode = session?.options.mode === "Hacking";
 
@@ -61,6 +67,7 @@ const BrowserSessionPage: React.FC = () => {
         },
       };
       setSession(newSession);
+      setSessionStartTime(new Date());
       setActivityLog([{ 
         source: 'system', 
         message: `Session "${newSession.title}" is active. Agent ready.`,
@@ -76,6 +83,19 @@ const BrowserSessionPage: React.FC = () => {
       setLoading(false);
     }
   }, [sessionState, sessionId, currentUser, location.state]);
+
+  // Session duration tracking
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (sessionStartTime) {
+      interval = setInterval(() => {
+        setCurrentDuration(Math.floor((Date.now() - sessionStartTime.getTime()) / 1000));
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [sessionStartTime]);
 
   useEffect(() => {
     if (isHackingMode) {
@@ -287,11 +307,70 @@ const BrowserSessionPage: React.FC = () => {
     if (sessionState.isActive && currentUser) {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:80';
       // Replace http/https with ws for the websocket connection
-      const wsUrl = backendUrl.replace(/^http|https/, 'ws');
+      const wsUrl = backendUrl.replace(/https?/, 'ws');
       return `${wsUrl}/vnc?uid=${currentUser.uid}`;
     }
     return '';
   }, [sessionState.isActive, currentUser]);
+
+  // Format duration helper
+  const formatDuration = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = seconds % 60;
+    
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  // Copy to clipboard functionality
+  const copyToClipboard = async (text: string, type: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedItem(type);
+      setTimeout(() => setCopiedItem(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy: ', err);
+    }
+  };
+
+  // Manual token refresh function
+  const handleTokenRefresh = async () => {
+    setTokenRefreshStatus('refreshing');
+    try {
+      const newToken = await refreshToken();
+      if (newToken) {
+        setTokenRefreshStatus('success');
+        setTimeout(() => setTokenRefreshStatus('idle'), 2000);
+      } else {
+        setTokenRefreshStatus('error');
+        setTimeout(() => setTokenRefreshStatus('idle'), 3000);
+      }
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      setTokenRefreshStatus('error');
+      setTimeout(() => setTokenRefreshStatus('idle'), 3000);
+    }
+  };
+
+  // Close VNC details dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showVncDetails) {
+        const target = event.target as Element;
+        if (!target.closest('[data-vnc-details]')) {
+          setShowVncDetails(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showVncDetails]);
 
   if (loading) {
     return <LoadingSpinner fullPage />;
@@ -319,17 +398,114 @@ const BrowserSessionPage: React.FC = () => {
             <ArrowLeft className="w-5 h-5 mr-1" />
             Back to Sessions
           </button>
-          <div className="text-center">
+          <div className="text-center flex-1 mx-4">
             <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100 truncate">{session?.title}</h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400">ID: {sessionId}</p>
+            <div className="flex items-center justify-center space-x-4 text-xs text-slate-500 dark:text-slate-400">
+              <span>ID: {sessionId}</span>
+              <span>•</span>
+              <span>Duration: {formatDuration(currentDuration)}</span>
+              <span>•</span>
+              <div className="flex items-center space-x-1">
+                <Shield className="w-3 h-3" />
+                <span>Session Active</span>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
+            {/* VNC Info Copy Button - Desktop only */}
+            <div className="hidden md:block relative" data-vnc-details>
+              <button
+                onClick={() => setShowVncDetails(!showVncDetails)}
+                className="flex items-center space-x-2 px-3 py-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors"
+                title="VNC Connection Details"
+              >
+                <Copy className="w-4 h-4" />
+                <span className="text-sm font-medium">VNC Details</span>
+              </button>
+              
+              {/* VNC Details Dropdown */}
+              {showVncDetails && (
+                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 z-50">
+                  <div className="p-4">
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">VNC Connection Details</h4>
+                    
+                    {/* VNC URL */}
+                    <div className="mb-4">
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">VNC URL</label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          value={vncUrl}
+                          readOnly
+                          className="flex-1 px-3 py-2 text-xs bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-600 rounded-md font-mono"
+                        />
+                        <button
+                          onClick={() => copyToClipboard(vncUrl, 'url')}
+                          className="p-2 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                          title="Copy VNC URL"
+                        >
+                          {copiedItem === 'url' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* VNC Password */}
+                    <div className="mb-4">
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">VNC Password</label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          value={sessionState.vnc_passwd || ''}
+                          readOnly
+                          className="flex-1 px-3 py-2 text-xs bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-600 rounded-md font-mono"
+                        />
+                        <button
+                          onClick={() => copyToClipboard(sessionState.vnc_passwd || '', 'password')}
+                          className="p-2 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                          title="Copy VNC Password"
+                        >
+                          {copiedItem === 'password' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Instructions */}
+                    <div className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-700/50 p-3 rounded-md">
+                      <p className="font-medium mb-1">How to connect:</p>
+                      <ol className="list-decimal list-inside space-y-1">
+                        <li>Use any VNC client (VNC Viewer, RealVNC, etc.)</li>
+                        <li>Enter the VNC URL above</li>
+                        <li>Use the password when prompted</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Token Refresh Button */}
             <button
-              onClick={() => setChatOpen(!chatOpen)}
-              className="md:hidden p-2 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600"
+              onClick={handleTokenRefresh}
+              disabled={tokenRefreshStatus === 'refreshing'}
+              className={`flex items-center space-x-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                tokenRefreshStatus === 'refreshing'
+                  ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 cursor-not-allowed'
+                  : tokenRefreshStatus === 'success'
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                  : tokenRefreshStatus === 'error'
+                  ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                  : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+              }`}
+              title="Refresh authentication token"
             >
-              <MessageSquare className="w-5 h-5" />
+              <RefreshCw className={`w-4 h-4 ${tokenRefreshStatus === 'refreshing' ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">
+                {tokenRefreshStatus === 'refreshing' ? 'Refreshing...' : 
+                 tokenRefreshStatus === 'success' ? 'Refreshed!' :
+                 tokenRefreshStatus === 'error' ? 'Failed' : 'Refresh Token'}
+              </span>
             </button>
+            
             <button 
               onClick={handleEndSession} 
               className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
@@ -340,29 +516,49 @@ const BrowserSessionPage: React.FC = () => {
         </header>
 
         <div className="flex-1 flex overflow-hidden">
-          <div className="flex-1 flex flex-col bg-black">
+          {/* VNC Display - Desktop always visible, mobile conditional */}
+          <div className={`flex-1 flex flex-col bg-black ${mobileView === 'vnc' ? 'block' : 'hidden'} md:block`}>
             {sessionState.isActive && sessionState.vnc_passwd && (
               <VncDisplay
                 url={vncUrl}
                 vncPassword={sessionState.vnc_passwd}
+                isHackingMode={isHackingMode}
               />
             )}
           </div>
 
+          {/* Chat Interface - Desktop always visible, mobile conditional */}
           <div className={`
             w-full md:w-96 flex-shrink-0 bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 
             transition-transform duration-300 ease-in-out 
-            ${chatOpen ? 'translate-x-0' : 'translate-x-full'} 
-            md:translate-x-0 md:relative absolute top-0 right-0 h-full z-20 md:z-auto
+            ${mobileView === 'chat' ? 'block' : 'hidden'} 
+            md:block
           `}>
             <ChatInterface
               activityLog={activityLog}
               onSendMessage={handleUserMessage}
               sessionId={sessionId!}
+              isHackingMode={isHackingMode}
+              currentUser={currentUser}
             />
           </div>
         </div>
       </main>
+
+      {/* Mobile Toggle Button - Bottom Right */}
+      <div className="md:hidden fixed bottom-6 right-6 z-50">
+        <button
+          onClick={() => setMobileView(mobileView === 'vnc' ? 'chat' : 'vnc')}
+          className="w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
+          title={mobileView === 'vnc' ? 'Switch to Activity Log' : 'Switch to VNC Session'}
+        >
+          {mobileView === 'vnc' ? (
+            <MessageSquare className="w-6 h-6 group-hover:scale-110 transition-transform" />
+          ) : (
+            <Monitor className="w-6 h-6 group-hover:scale-110 transition-transform" />
+          )}
+        </button>
+      </div>
       
       <Snackbar
         open={Boolean(pageAlert)}

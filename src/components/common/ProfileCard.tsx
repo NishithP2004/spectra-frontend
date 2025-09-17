@@ -22,7 +22,7 @@ const ProfileCard: React.FC = () => {
   const photoURL = currentUser.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=6366f1&color=ffffff`;
 
   return (
-    <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border border-slate-200 dark:border-slate-700 rounded-lg shadow-2xl p-6 max-w-sm mx-auto">
+    <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg border border-slate-200 dark:border-slate-700 rounded-lg shadow-2xl p-6 max-w-sm mx-auto relative z-40 max-h-[80vh] overflow-y-auto">
       {/* Profile Header */}
       <div className="flex flex-col items-center mb-6">
         <img

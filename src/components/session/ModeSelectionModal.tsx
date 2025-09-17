@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Check } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Check, RefreshCw, Sparkles } from 'lucide-react';
 
 interface ModeSelectionModalProps {
   isOpen: boolean;
@@ -15,8 +15,77 @@ const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({
   const [mode, setMode] = useState('Normal Mode');
   const [sessionTitle, setSessionTitle] = useState('');
   const [enableRecording, setEnableRecording] = useState(false);
+  const [suggestedNames, setSuggestedNames] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    if (showSuggestions) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSuggestions]);
 
   if (!isOpen) return null;
+
+  // Random session name generation
+  const generateRandomNames = () => {
+    const prefixes = [
+      'Secure', 'Advanced', 'Professional', 'Elite', 'Premium', 'Ultra', 'Pro', 'Master', 'Expert', 'Dynamic',
+      'Quantum', 'Cyber', 'Digital', 'Virtual', 'Cloud', 'Smart', 'Intelligent', 'Automated', 'Optimized', 'Enhanced'
+    ];
+    
+    const activities = [
+      'Browsing', 'Research', 'Analysis', 'Testing', 'Development', 'Exploration', 'Investigation', 'Audit', 'Review', 'Assessment',
+      'Penetration', 'Security', 'Vulnerability', 'Compliance', 'Forensics', 'Incident Response', 'Threat Hunting', 'Red Team', 'Blue Team', 'Purple Team'
+    ];
+    
+    const contexts = [
+      'Session', 'Environment', 'Workspace', 'Lab', 'Sandbox', 'Playground', 'Zone', 'Space', 'Hub', 'Center',
+      'Mission', 'Operation', 'Project', 'Campaign', 'Initiative', 'Exercise', 'Simulation', 'Demo', 'Pilot', 'Trial'
+    ];
+    
+    const adjectives = [
+      'Stealth', 'Rapid', 'Precise', 'Comprehensive', 'Thorough', 'Systematic', 'Methodical', 'Strategic', 'Tactical', 'Advanced',
+      'Cutting-edge', 'Next-gen', 'Revolutionary', 'Innovative', 'Breakthrough', 'Game-changing', 'Disruptive', 'Transformative', 'Pioneering', 'Groundbreaking'
+    ];
+    
+    const names = [];
+    for (let i = 0; i < 6; i++) {
+      const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+      const activity = activities[Math.floor(Math.random() * activities.length)];
+      const context = contexts[Math.floor(Math.random() * contexts.length)];
+      const adjective = Math.random() > 0.5 ? adjectives[Math.floor(Math.random() * adjectives.length)] + ' ' : '';
+      
+      const name = `${prefix} ${adjective}${activity} ${context}`;
+      if (!names.includes(name)) {
+        names.push(name);
+      }
+    }
+    
+    return names;
+  };
+
+  const handleGenerateSuggestions = () => {
+    const names = generateRandomNames();
+    setSuggestedNames(names);
+    setShowSuggestions(true);
+  };
+
+  const handleSuggestionClick = (name: string) => {
+    setSessionTitle(name);
+    setShowSuggestions(false);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,13 +97,13 @@ const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({
   };
 
   // Glassmorphic modal background
-  const modalStyleClasses = "bg-white/80 dark:bg-slate-800/80 backdrop-blur-lg shadow-2xl border border-gray-200 dark:border-slate-700/80";
+  const modalStyleClasses = "bg-white dark:bg-slate-800 backdrop-blur-lg shadow-2xl border border-gray-200 dark:border-slate-700";
 
   // Define base classes and dark mode overrides for inner elements
   const textColor = "text-gray-800 dark:text-gray-100";
   const headingColor = "text-gray-900 dark:text-white";
   const labelColor = "text-gray-600 dark:text-gray-300";
-  const inputBgColor = "bg-gray-50/80 dark:bg-slate-700/80";
+  const inputBgColor = "bg-gray-50 dark:bg-slate-700";
   const inputBorderColor = "border-gray-300 dark:border-slate-600";
   const inputFocusRingColor = "focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-indigo-500 dark:focus:border-indigo-600";
   const placeholderColor = "placeholder-gray-400 dark:placeholder-gray-500";
@@ -45,7 +114,7 @@ const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({
 
   const unselectedModeBaseClasses = "hover:border-indigo-500";
   const unselectedModeLightClasses = "bg-white hover:bg-indigo-50";
-  const unselectedModeDarkClasses = "dark:bg-slate-800 dark:hover:bg-slate-700/60";
+  const unselectedModeDarkClasses = "dark:bg-slate-800 dark:hover:bg-slate-700";
   
   const radioDotSelectedLight = "bg-indigo-500 border-indigo-500";
   const radioDotSelectedDark = "dark:bg-indigo-500 dark:border-indigo-500";
@@ -55,7 +124,7 @@ const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({
   const checkboxSelectedLight = "bg-indigo-500 border-indigo-500";
   const checkboxSelectedDark = "dark:bg-indigo-500 dark:border-indigo-500";
   const checkboxUnselectedLightBg = "bg-gray-50";
-  const checkboxUnselectedDarkBg = "dark:bg-slate-700/80";
+  const checkboxUnselectedDarkBg = "dark:bg-slate-700";
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/30 dark:bg-slate-900/50 flex items-center justify-center p-4 animate-fadeIn">
@@ -76,18 +145,73 @@ const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({
         
         <form onSubmit={handleSubmit} className="p-5 space-y-6">
           <div>
-            <label htmlFor="sessionTitle" className={`block mb-1.5 text-sm font-medium ${labelColor}`}>
+            <div className="flex items-center justify-between mb-1.5">
+              <label htmlFor="sessionTitle" className={`block text-sm font-medium ${labelColor}`}>
               Session Title
             </label>
-            <input
-              type="text"
-              id="sessionTitle"
-              className={`${inputBgColor} ${inputBorderColor} ${textColor} ${placeholderColor} text-sm rounded-lg ${inputFocusRingColor} block w-full p-3`}
-              value={sessionTitle}
-              onChange={(e) => setSessionTitle(e.target.value)}
-              placeholder="Enter a descriptive title"
-              required
-            />
+              <button
+                type="button"
+                onClick={handleGenerateSuggestions}
+                className="flex items-center space-x-1 px-2 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-md transition-colors"
+                title="Generate random session names"
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>Suggest Names</span>
+              </button>
+            </div>
+            
+            <div className="relative" ref={suggestionsRef}>
+              <input
+                type="text"
+                id="sessionTitle"
+                className={`${inputBgColor} ${inputBorderColor} ${textColor} ${placeholderColor} text-sm rounded-lg ${inputFocusRingColor} block w-full p-3 pr-10`}
+                value={sessionTitle}
+                onChange={(e) => setSessionTitle(e.target.value)}
+                onFocus={() => setShowSuggestions(suggestedNames.length > 0)}
+                placeholder="Enter a descriptive title or click 'Suggest Names'"
+                required
+              />
+              
+              {/* Suggestions Dropdown */}
+              {showSuggestions && suggestedNames.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  <div className="p-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Suggested Names</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowSuggestions(false)}
+                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <div className="space-y-1">
+                      {suggestedNames.map((name, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => handleSuggestionClick(name)}
+                          className="w-full text-left px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-md transition-colors"
+                        >
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                      <button
+                        type="button"
+                        onClick={handleGenerateSuggestions}
+                        className="w-full flex items-center justify-center space-x-1 px-3 py-2 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-md transition-colors"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Generate More</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           
           <div>
@@ -97,8 +221,8 @@ const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({
               <div
                 className={`p-4 border rounded-lg cursor-pointer transition-all duration-150 ease-in-out ${inputBorderColor} ${
                   mode === 'Normal Mode'
-                    ? `${selectedModeBaseClasses} bg-indigo-100/80 dark:bg-slate-700/90`
-                    : `${unselectedModeBaseClasses} bg-white/60 dark:bg-slate-800/60 hover:bg-white/80 dark:hover:bg-slate-700/80`
+                    ? `${selectedModeBaseClasses} bg-indigo-100 dark:bg-slate-700`
+                    : `${unselectedModeBaseClasses} bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700`
                 }`}
                 onClick={() => setMode('Normal Mode')}
               >
@@ -117,8 +241,8 @@ const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({
               <div
                 className={`p-4 border rounded-lg cursor-pointer transition-all duration-150 ease-in-out ${inputBorderColor} ${
                   mode === 'Hacking Mode'
-                    ? `${selectedModeBaseClasses} bg-indigo-100/80 dark:bg-slate-700/90`
-                    : `${unselectedModeBaseClasses} bg-white/60 dark:bg-slate-800/60 hover:bg-white/80 dark:hover:bg-slate-700/80`
+                    ? `${selectedModeBaseClasses} bg-indigo-100 dark:bg-slate-700`
+                    : `${unselectedModeBaseClasses} bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700`
                 }`}
                 onClick={() => setMode('Hacking Mode')}
               >
@@ -157,7 +281,7 @@ const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className={`py-2.5 px-5 text-sm font-medium ${textColor} focus:outline-none bg-gray-200/70 hover:bg-gray-300/70 dark:bg-slate-600/70 dark:hover:bg-slate-500/70 rounded-lg border ${inputBorderColor} focus:ring-4 focus:ring-gray-300 dark:focus:ring-slate-600 transition-colors`}
+              className={`py-2.5 px-5 text-sm font-medium ${textColor} focus:outline-none bg-gray-200 hover:bg-gray-300 dark:bg-slate-600 dark:hover:bg-slate-500 rounded-lg border ${inputBorderColor} focus:ring-4 focus:ring-gray-300 dark:focus:ring-slate-600 transition-colors`}
             >
               Cancel
             </button>

@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { Session } from '../components/session/SessionCard';
-import { ThumbsUp, MessageSquare, Share2, ChevronLeft } from 'lucide-react';
+import { ThumbsUp, MessageSquare, Share2, ChevronLeft, Copy, Check } from 'lucide-react';
 import { DiscussionEmbed } from 'disqus-react';
 
 interface Comment {
@@ -22,6 +22,7 @@ const WatchSessionPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [aiSummary, setAiSummary] = useState<string>('');
+  const [copiedItem, setCopiedItem] = useState<string | null>(null);
 
   // Fetch session details
   useEffect(() => {
@@ -104,6 +105,17 @@ const WatchSessionPage: React.FC = () => {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
+  // Copy to clipboard functionality
+  const copyToClipboard = async (text: string, type: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedItem(type);
+      setTimeout(() => setCopiedItem(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy: ', err);
+    }
+  };
+
   const disqusConfig = {
     url: window.location.href,
     identifier: sessionId,
@@ -144,18 +156,32 @@ const WatchSessionPage: React.FC = () => {
         <div className="p-6">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">{session.title}</h1>
           
-          <div className="flex items-center text-gray-600 dark:text-gray-400 mb-4">
-            <span>{formatDate(session.createdAt)}</span>
-            <span className="mx-2">•</span>
-            <span>Duration: {duration}</span>
-            <span className="mx-2">•</span>
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-              session.options.mode === 'Hacking' 
-                ? 'bg-red-100 text-red-800 dark:bg-red-700/30 dark:text-red-300' 
-                : 'bg-blue-100 text-blue-800 dark:bg-blue-700/30 dark:text-blue-300'
-            }`}>
-              {session.options.mode} Mode
-            </span>
+          <div className="flex items-center justify-between text-gray-600 dark:text-gray-400 mb-4">
+            <div className="flex items-center">
+              <span>{formatDate(session.createdAt)}</span>
+              <span className="mx-2">•</span>
+              <span>Duration: {duration}</span>
+              <span className="mx-2">•</span>
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                session.options.mode === 'Hacking' 
+                  ? 'bg-red-100 text-red-800 dark:bg-red-700/30 dark:text-red-300' 
+                  : 'bg-blue-100 text-blue-800 dark:bg-blue-700/30 dark:text-blue-300'
+              }`}>
+                {session.options.mode} Mode
+              </span>
+            </div>
+            
+            {/* Copy Recording URL Button */}
+            {session.recording?.url && (
+              <button
+                onClick={() => copyToClipboard(session.recording.url, 'recording')}
+                className="flex items-center space-x-1 px-3 py-1.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors"
+                title="Copy Recording URL"
+              >
+                {copiedItem === 'recording' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                <span className="text-sm">Copy URL</span>
+              </button>
+            )}
           </div>
           
           <div className="flex items-center mb-6">
