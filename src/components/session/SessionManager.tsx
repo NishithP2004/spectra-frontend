@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from '../../contexts/SessionContext';
 import LoadingSpinner from '../common/LoadingSpinner';
-import Alert, { AlertColor } from '@mui/material/Alert';
-import Snackbar from '@mui/material/Snackbar';
+import { useToast } from '../../contexts/ToastContext';
 
 interface SessionManagerProps {
   enableRecording: boolean;
@@ -14,7 +13,7 @@ interface SessionManagerProps {
 class SessionManagerSingleton {
   private static instance: SessionManagerSingleton;
   private isInitializing = false;
-  private currentRequest: Promise<{ success: boolean; message: string; sessionId?: string }> | null = null;
+  private currentRequest: Promise<{ success: boolean; message: string; sessionId?: string; isExistingSession?: boolean }> | null = null;
   private countdownInterval: NodeJS.Timeout | null = null;
   private onSessionReadyCallback: ((sessionId: string) => void) | null = null;
   private onErrorCallback: ((error: string) => void) | null = null;
@@ -29,10 +28,10 @@ class SessionManagerSingleton {
 
   async startSession(
     enableRecording: boolean,
-    startSessionFn: (enableRecording: boolean) => Promise<{ success: boolean; message: string; sessionId?: string }>,
+    startSessionFn: (enableRecording: boolean) => Promise<{ success: boolean; message: string; sessionId?: string; isExistingSession?: boolean }>,
     onSessionReady: (sessionId: string) => void,
     onError: (error: string) => void
-  ): Promise<{ success: boolean; message: string; sessionId?: string }> {
+  ): Promise<{ success: boolean; message: string; sessionId?: string; isExistingSession?: boolean }> {
     console.log('[SessionManagerSingleton] startSession called');
 
     // If already initializing, return the existing request
@@ -51,16 +50,16 @@ class SessionManagerSingleton {
       try {
         console.log('[SessionManagerSingleton] Making actual API request');
         const result = await startSessionFn(enableRecording);
-        
+
         if (result.success) {
           // Store the session ID for later use
           this.sessionId = result.sessionId || null;
           // Start countdown
-          this.startCountdown();
+          this.startCountdown(result.isExistingSession);
         } else {
           this.onErrorCallback?.(result.message);
         }
-        
+
         return result;
       } catch (error) {
         console.error('[SessionManagerSingleton] Error:', error);
@@ -76,12 +75,12 @@ class SessionManagerSingleton {
     return this.currentRequest;
   }
 
-  private startCountdown() {
-    let timeLeft = 10;
-    
+  private startCountdown(isExistingSession = false) {
+    let timeLeft = isExistingSession ? 3 : 10; // Faster countdown for existing sessions
+
     this.countdownInterval = setInterval(() => {
       timeLeft--;
-      
+
       if (timeLeft <= 0) {
         if (this.countdownInterval) {
           clearInterval(this.countdownInterval);
@@ -122,10 +121,11 @@ const SessionManager: React.FC<SessionManagerProps> = ({
 }) => {
   const { sessionState, startSession } = useSession();
   const [loadingTime, setLoadingTime] = useState(0);
-  const [alertMessage, setAlertMessage] = useState<{ text: string; severity: AlertColor } | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("Starting Session...");
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   const singleton = useRef(SessionManagerSingleton.getInstance());
+  const { addToast } = useToast();
 
   useEffect(() => {
     // Prevent multiple initializations
@@ -146,14 +146,21 @@ const SessionManager: React.FC<SessionManagerProps> = ({
       );
 
       if (result.success) {
-        setAlertMessage({ text: result.message, severity: 'success' });
-        
+        if (result.isExistingSession) {
+          addToast(result.message, 'info');
+          setStatusMessage("Resuming Session...");
+        } else {
+          addToast(result.message, 'success');
+        }
+
         // Start local countdown for UI
-        let timeLeft = 10;
+        const maxTime = result.isExistingSession ? 3 : 10;
+        let timeLeft = maxTime;
+
         countdownRef.current = setInterval(() => {
           timeLeft--;
-          setLoadingTime(10 - timeLeft);
-          
+          setLoadingTime(maxTime - timeLeft);
+
           if (timeLeft <= 0) {
             if (countdownRef.current) {
               clearInterval(countdownRef.current);
@@ -164,7 +171,7 @@ const SessionManager: React.FC<SessionManagerProps> = ({
           }
         }, 1000);
       } else {
-        setAlertMessage({ text: result.message, severity: 'error' });
+        addToast(result.message, 'error');
         onError(result.message);
       }
     };
@@ -179,7 +186,7 @@ const SessionManager: React.FC<SessionManagerProps> = ({
         countdownRef.current = null;
       }
     };
-  }, [enableRecording, startSession, onSessionReady, onError, isInitialized]);
+  }, [enableRecording, startSession, onSessionReady, onError, isInitialized, addToast]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -191,47 +198,29 @@ const SessionManager: React.FC<SessionManagerProps> = ({
     };
   }, []);
 
-  if (sessionState.isLoading || loadingTime < 10) {
+  if (sessionState.isLoading || isInitialized) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white dark:bg-slate-800 rounded-lg p-8 max-w-md w-full mx-4 text-center">
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 transition-colors duration-300">
+        <div className="bg-white dark:bg-[#0a0a0a] border border-gray-200 dark:border-white/10 rounded-2xl p-8 max-w-md w-full mx-4 text-center shadow-2xl transition-all duration-300">
           <LoadingSpinner />
-          <h3 className="text-lg font-semibold mt-4 mb-2 text-gray-900 dark:text-gray-100">
-            Starting Session...
+          <h3 className="text-xl font-semibold mt-6 mb-2 text-gray-900 dark:text-white transition-colors">
+            {statusMessage}
           </h3>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
+          <p className="text-gray-500 dark:text-gray-400 mb-6 transition-colors">
             Please wait while we initialize your browser environment
           </p>
-          <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2">
-            <div 
-              className="bg-indigo-600 dark:bg-indigo-500 h-2 rounded-full transition-all duration-1000"
-              style={{ width: `${(loadingTime / 10) * 100}%` }}
+          <div className="w-full bg-gray-100 dark:bg-white/5 rounded-full h-1.5 overflow-hidden transition-colors">
+            <div
+              className="bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-500 dark:to-purple-600 h-1.5 rounded-full transition-all duration-1000 ease-linear"
+              style={{ width: '100%' }} // Indeterminate or just full width usually looks better for short loads, but let's animate if we can match time
             />
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-            {loadingTime}/10 seconds
-          </p>
         </div>
       </div>
     );
   }
 
-  return (
-    <>
-      {alertMessage && (
-        <Snackbar
-          open={Boolean(alertMessage)}
-          autoHideDuration={5000}
-          onClose={() => setAlertMessage(null)}
-          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        >
-          <Alert onClose={() => setAlertMessage(null)} severity={alertMessage.severity} sx={{ width: '100%' }}>
-            {alertMessage.text}
-          </Alert>
-        </Snackbar>
-      )}
-    </>
-  );
+  return null;
 };
 
-export default SessionManager; 
+export default SessionManager;

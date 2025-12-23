@@ -11,7 +11,7 @@ interface SessionState {
 
 interface SessionContextType {
   sessionState: SessionState;
-  startSession: (enableRecording: boolean) => Promise<{ success: boolean; message: string; sessionId?: string }>;
+  startSession: (enableRecording: boolean) => Promise<{ success: boolean; message: string; sessionId?: string; isExistingSession?: boolean }>;
   endSession: () => Promise<{ success: boolean; message: string }>;
   clearSession: () => void;
 }
@@ -42,14 +42,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:80';
   const requestIdRef = useRef(0);
 
-  const startSession = useCallback(async (enableRecording: boolean): Promise<{ success: boolean; message: string; sessionId?: string }> => {
+  const startSession = useCallback(async (enableRecording: boolean): Promise<{ success: boolean; message: string; sessionId?: string; isExistingSession?: boolean }> => {
     if (!currentUser) {
       return { success: false, message: 'User not authenticated' };
     }
 
     // Create a unique request key
     const requestKey = `start-session-${currentUser.uid}-${enableRecording}`;
-    
+
     // Check if there's already an active request for this user and configuration
     if (activeRequests.has(requestKey)) {
       console.log(`[SessionContext] Request already in progress for key: ${requestKey}`);
@@ -105,11 +105,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
           // Create agent session with existing session ID
           await createAgentSession(data.session_id, token);
-          
-          return { 
-            success: true, 
-            message: 'Session already exists and is ready',
-            sessionId: data.session_id
+
+          return {
+            success: true,
+            message: 'Session already exists. Resuming...',
+            sessionId: data.session_id,
+            isExistingSession: true
           };
         }
 
@@ -125,17 +126,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Create agent session with new session ID
         await createAgentSession(data.session_id, token);
 
-        return { 
-          success: true, 
+        return {
+          success: true,
           message: 'Session started successfully',
           sessionId: data.session_id
         };
       } catch (error) {
         console.error(`[SessionContext] Error in request ${currentRequestId}:`, error);
         setSessionState(prev => ({ ...prev, isLoading: false }));
-        return { 
-          success: false, 
-          message: error instanceof Error ? error.message : 'Failed to start session' 
+        return {
+          success: false,
+          message: error instanceof Error ? error.message : 'Failed to start session'
         };
       } finally {
         // Remove the request from active requests
@@ -157,9 +158,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     for (let i = 0; i < maxRetries; i++) {
       try {
         console.log(`[SessionContext] Attempt ${i + 1} to create agent session for sessionId: ${sessionId}`);
-        
-        const agentSessionUrl = `${BACKEND_URL}/agent/apps/spectra-agent/users/${currentUser!.uid}/sessions/${sessionId}`;
-        
+
+        const agentSessionUrl = `${BACKEND_URL}/agent/apps/spectra_agent/users/${currentUser!.uid}/sessions/${sessionId}`;
+
         const response = await fetch(agentSessionUrl, {
           method: 'POST',
           headers: {
@@ -169,7 +170,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         });
 
         const data = await response.json();
-        
+
         if (response.ok) {
           console.log(`[SessionContext] Agent session created successfully:`, data);
           return; // Success, exit the loop
@@ -186,7 +187,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
       } catch (error) {
         console.error(`[SessionContext] Error creating agent session (Attempt ${i + 1}):`, error);
-        
+
         if (i < maxRetries - 1) {
           const delay = initialDelay * Math.pow(2, i);
           console.log(`[SessionContext] Retrying in ${delay / 1000} seconds...`);
@@ -244,9 +245,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error ending session:', error);
       setSessionState(prev => ({ ...prev, isLoading: false }));
-      return { 
-        success: false, 
-        message: error instanceof Error ? error.message : 'Failed to end session' 
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to end session'
       };
     }
   }, [currentUser, sessionState.isActive, sessionState.isLoading, BACKEND_URL]);
